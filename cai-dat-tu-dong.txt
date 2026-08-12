@@ -1,0 +1,158 @@
+# FILE CAI DAT TU DONG CHO WINDOWS
+# ------------------------------------------------------------
+# HUONG DAN:
+# 1. Doi ten file nay tu "cai-dat-tu-dong.txt" thanh "cai-dat-tu-dong.ps1".
+# 2. Bam chuot phai nut Start cua Windows.
+# 3. Chon "Terminal (Admin)" hoac "Windows PowerShell (Admin)".
+# 4. Chay cac lenh:
+#      cd C:\Users\Dell\Desktop\streamlit
+#      Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+#      .\cai-dat-tu-dong.ps1
+#
+# LUU Y:
+# - File .txt khong the tu chay truc tiep tren Windows.
+# - Can doi duoi sang .ps1 de Windows hieu day la script PowerShell.
+# - May can co Internet de tai Docker Desktop, Git, Java, Node.js.
+# ------------------------------------------------------------
+
+$ErrorActionPreference = "Stop"
+
+function Write-Step {
+    param([string]$Message)
+    Write-Host ""
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host $Message -ForegroundColor Cyan
+    Write-Host "============================================================" -ForegroundColor Cyan
+}
+
+function Test-Admin {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Test-CommandExists {
+    param([string]$Command)
+    return [bool](Get-Command $Command -ErrorAction SilentlyContinue)
+}
+
+function Install-WithWinget {
+    param(
+        [string]$Id,
+        [string]$Name
+    )
+
+    Write-Step "Cai dat $Name"
+    winget install --id $Id --exact --accept-package-agreements --accept-source-agreements
+}
+
+if (-not (Test-Admin)) {
+    Write-Host "Vui long mo PowerShell bang quyen Administrator roi chay lai." -ForegroundColor Red
+    Write-Host "Cach mo: Bam chuot phai nut Start -> Terminal (Admin)." -ForegroundColor Yellow
+    exit 1
+}
+
+$ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location $ProjectRoot
+
+Write-Step "Kiem tra cong cu winget"
+if (-not (Test-CommandExists "winget")) {
+    Write-Host "May chua co winget. Hay cap nhat App Installer tu Microsoft Store, sau do chay lai file nay." -ForegroundColor Red
+    exit 1
+}
+Write-Host "Da co winget." -ForegroundColor Green
+
+Write-Step "Cai Docker Desktop neu chua co"
+$dockerExists = Test-CommandExists "docker"
+if (-not $dockerExists) {
+    Install-WithWinget -Id "Docker.DockerDesktop" -Name "Docker Desktop"
+    Write-Host "Docker Desktop da duoc cai. Co the can khoi dong lai may neu day la lan cai dau." -ForegroundColor Yellow
+} else {
+    Write-Host "Da co Docker." -ForegroundColor Green
+}
+
+Write-Step "Cai Git neu chua co"
+if (-not (Test-CommandExists "git")) {
+    Install-WithWinget -Id "Git.Git" -Name "Git"
+} else {
+    Write-Host "Da co Git." -ForegroundColor Green
+}
+
+Write-Step "Cai Java JDK 21 neu chua co"
+if (-not (Test-CommandExists "java")) {
+    Install-WithWinget -Id "EclipseAdoptium.Temurin.21.JDK" -Name "Java JDK 21"
+} else {
+    Write-Host "Da co Java." -ForegroundColor Green
+}
+
+Write-Step "Cai Node.js LTS neu chua co"
+if (-not (Test-CommandExists "node")) {
+    Install-WithWinget -Id "OpenJS.NodeJS.LTS" -Name "Node.js LTS"
+} else {
+    Write-Host "Da co Node.js." -ForegroundColor Green
+}
+
+Write-Step "Khoi dong Docker Desktop"
+$dockerDesktopPath = "$Env:ProgramFiles\Docker\Docker\Docker Desktop.exe"
+if (Test-Path $dockerDesktopPath) {
+    Start-Process $dockerDesktopPath
+}
+
+Write-Host "Dang doi Docker san sang. Lan dau co the mat vai phut..." -ForegroundColor Yellow
+$dockerReady = $false
+for ($i = 1; $i -le 60; $i++) {
+    try {
+        docker version | Out-Null
+        $dockerReady = $true
+        break
+    } catch {
+        Start-Sleep -Seconds 5
+    }
+}
+
+if (-not $dockerReady) {
+    Write-Host "Docker chua san sang." -ForegroundColor Red
+    Write-Host "Hay mo Docker Desktop, doi den khi Docker chay xong, roi chay lai:" -ForegroundColor Yellow
+    Write-Host "docker compose up -d --build" -ForegroundColor Yellow
+    exit 1
+}
+
+Write-Step "Tao file cau hinh .env neu chua co"
+if (-not (Test-Path ".env")) {
+    if (Test-Path ".env.example") {
+        Copy-Item ".env.example" ".env"
+        Write-Host "Da tao file .env tu .env.example." -ForegroundColor Green
+    } else {
+        Write-Host "Khong thay .env.example. Tao .env mac dinh." -ForegroundColor Yellow
+        @"
+POSTGRES_DB=klgd
+POSTGRES_USER=klgd
+POSTGRES_PASSWORD=doi-mat-khau-nay
+POSTGRES_PORT=5432
+
+BACKEND_PORT=8080
+FRONTEND_PORT=3000
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+JWT_SECRET=doi-bi-mat-jwt-it-nhat-32-ky-tu
+JWT_EXPIRATION_MINUTES=480
+"@ | Set-Content -Path ".env" -Encoding UTF8
+    }
+} else {
+    Write-Host "Da co file .env." -ForegroundColor Green
+}
+
+Write-Step "Build va chay phan mem"
+docker compose up -d --build
+
+Write-Step "Kiem tra trang thai container"
+docker compose ps
+
+Write-Step "Hoan tat"
+Write-Host "Neu khong co loi, hay mo trinh duyet va vao:" -ForegroundColor Green
+Write-Host "http://localhost:3000" -ForegroundColor Green
+Write-Host ""
+Write-Host "Tai khoan mac dinh:" -ForegroundColor Cyan
+Write-Host "Ten dang nhap: admin" -ForegroundColor Cyan
+Write-Host "Mat khau: admin123" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Neu khong vao duoc, doi 1-2 phut roi refresh lai trang." -ForegroundColor Yellow

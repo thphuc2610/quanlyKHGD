@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: klgd-backend
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/klgd}
+    username: ${DB_USERNAME:klgd}
+    password: ${DB_PASSWORD:klgd}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 50MB
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+  jwt:
+    secret: ${JWT_SECRET:dev-secret-change-me-at-least-32-characters}
+    expiration-minutes: ${JWT_EXPIRATION_MINUTES:480}

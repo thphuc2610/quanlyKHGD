@@ -1,0 +1,255 @@
+import streamlit as st
+import pandas as pd
+import io
+import re
+
+# =====================================================
+# 1. CẤU HÌNH GIAO DIỆN
+# =====================================================
+st.set_page_config(
+    page_title="Hệ thống Quản lý Giảng dạy V28.0",
+    layout="wide",
+    page_icon="💎"
+)
+
+st.markdown("""
+<style>
+thead tr th {
+    background-color: #1E3A8A !important;
+    color: white !important;
+    font-weight: bold !important;
+    text-align: center !important;
+}
+.main { background-color: #f8f9fa; }
+[data-testid="stMetric"] {
+    background-color: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    border-top: 5px solid #1E3A8A;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# =====================================================
+# 2. CHUẨN HÓA TÊN GIẢNG VIÊN
+# =====================================================
+def normalize_name(name):
+    name = str(name)
+    name = re.sub(r"\(.*?\)", "", name)
+    name = re.sub(r"\s+", " ", name)
+    return name.strip()
+
+# =====================================================
+# 3. TÍNH HỆ SỐ K (GIỮ NGUYÊN LOGIC ĐẦY ĐỦ)
+# =====================================================
+def calculate_k(row):
+    ten_mon = str(row['HP']).lower()
+    sv = row['SV']
+    bm = str(row.get('BM', '')).strip()
+    don_vi = str(row.get('Đơn vị', '')).strip()
+
+    if 'đồ án' in ten_mon:
+        k = 1.1 + (sv - 40) * 0.01
+        return round(max(1.0, min(1.5, k)), 2)
+
+    if (
+        bm in [
+            "Bộ môn Ngôn ngữ Anh",
+            "Bộ môn Tiếng anh",
+            "Bộ môn Ngôn ngữ Trung Quốc"
+        ]
+        and don_vi == "KHCB"
+    ):
+        k = 1.1 + (sv - 30) * 0.01
+        return round(max(0.9, min(1.5, k)), 2)
+
+    if (
+        bm == "Bộ môn Giáo dục thể chất"
+        and don_vi == "KHCB"
+    ):
+        k = 1 + (sv - 50) * 0.01
+        return round(max(0.9, min(1.2, k)), 2)
+
+    if 'thí nghiệm' in ten_mon:
+        k = 0.6 + (sv - 25) * 0.015
+        return round(max(0.5, min(1.2, k)), 2)
+
+    if 'thực tập trắc địa' in ten_mon:
+        if sv < 20:
+            return 2
+        k = 2.5 + (sv - 25) * 0.05
+        return round(k, 2)
+
+    if 'thực tập tốt nghiệp' in ten_mon:
+        return round(0.5 * sv, 2)
+
+    if 'thực tập' in ten_mon:
+        if sv < 30:
+            return 2
+        k = 2.5 + (sv - 35) * 0.05
+        return round(k, 2)
+
+    k = 1.0 + (sv - 40) * 0.01
+    return round(max(0.9, min(1.5, k)), 2)
+
+# =====================================================
+# 4. TÍNH TIẾT QUY ĐỔI
+# =====================================================
+def calculate_tiet_quy_doi(row):
+    ten_mon = str(row['HP']).lower()
+    sv = row['SV']
+    tc = row['TC']
+    bm = str(row.get('BM', '')).strip()
+    don_vi = str(row.get('Đơn vị', '')).strip()
+    k = row['Hệ số K']
+
+    if 'thực tập trắc địa' in ten_mon:
+        return round(k * 7, 2)
+
+    if 'thực tập tốt nghiệp' in ten_mon:
+        return round(k * 2, 2)
+
+    if 'thực tập' in ten_mon:
+        return round(k * 2, 2)
+
+    if (
+        bm == "Bộ môn Giáo dục thể chất"
+        and don_vi == "KHCB"
+    ):
+        k_lt = 1 + (sv - 50) * 0.01
+        k_lt = max(0.9, min(1.2, k_lt))
+        k_th = 0.7 + (sv - 50) * 0.01
+        k_th = max(0.6, min(0.9, k_th))
+        return round((20 * k_lt) + (10 * k_th), 2)
+
+    return round(k * tc * 15, 2)
+
+# =====================================================
+# 5. MAIN
+# =====================================================
+def main():
+
+    # ===== SIDEBAR + AVATAR =====
+    with st.sidebar:
+
+        if 'avatar_data' not in st.session_state:
+            st.session_state.avatar_data = None
+
+        if st.session_state.avatar_data is None:
+            avatar_file = st.file_uploader("Chọn ảnh đại diện", type=["jpg", "png", "jpeg"])
+            if avatar_file:
+                st.session_state.avatar_data = avatar_file.read()
+                st.rerun()
+        else:
+            st.image(st.session_state.avatar_data, width=150)
+            if st.button("🔄 Thay đổi Avatar"):
+                st.session_state.avatar_data = None
+                st.rerun()
+
+        st.markdown("### **TS. Phan Khanh Khánh**")
+        st.caption("📧 khanhpk@tlu.edu.vn")
+        st.markdown("---")
+
+        che_do = st.radio(
+            "Chế độ hiển thị:",
+            ["Tổng hợp giảng dạy", "Chi tiết từng giảng viên"],
+            label_visibility="collapsed"
+        )
+
+        st.markdown("---")
+        uploaded_files = st.file_uploader(
+            "Tải tệp Excel công việc",
+            type=["xlsx"],
+            accept_multiple_files=True
+        )
+
+    if not uploaded_files:
+        st.title("💎 Prestige Teaching Dashboard")
+        st.info("Vui lòng tải file Excel để bắt đầu.")
+        return
+
+    all_data = []
+
+    for uploaded_file in uploaded_files:
+
+        xl = pd.ExcelFile(uploaded_file)
+
+        for sheet_name in xl.sheet_names:
+
+            df = xl.parse(sheet_name)
+            df.columns = [str(c).lower().strip() for c in df.columns]
+
+            def find_col(keywords):
+                for c in df.columns:
+                    if any(k in c for k in keywords):
+                        return c
+                return None
+
+            c_gv = find_col(['giảng viên'])
+            c_hp = find_col(['học phần', 'tên lớp'])
+            c_tc = find_col(['tín chỉ', 'tc'])
+            c_sv = find_col(['sĩ số', 'sv'])
+            c_dv = find_col(['đơn vị'])
+
+            # ===== CHỈ LẤY "Tên bộ môn PH" =====
+            c_bm_ph = None
+            for c in df.columns:
+                if "tên bộ môn ph" in c:
+                    c_bm_ph = c
+                    break
+
+            if not c_bm_ph:
+                st.error("❌ Không tìm thấy cột 'Tên bộ môn PH' trong file.")
+                return
+
+            if c_gv and c_hp:
+
+                temp = pd.DataFrame({
+                    'GV': df[c_gv].ffill().astype(str).apply(normalize_name),
+                    'HP': df[c_hp],
+                    'TC': pd.to_numeric(df[c_tc], errors='coerce').fillna(0),
+                    'SV': pd.to_numeric(df[c_sv], errors='coerce').fillna(0),
+                    'BM': df[c_bm_ph].astype(str).str.strip(),
+                    'Đơn vị': df[c_dv] if c_dv else ""
+                })
+
+                temp = temp.dropna(subset=['HP'])
+                all_data.append(temp)
+
+    if not all_data:
+        st.error("Không có dữ liệu hợp lệ.")
+        return
+
+    full_data = pd.concat(all_data, ignore_index=True)
+
+    full_data['Hệ số K'] = full_data.apply(calculate_k, axis=1)
+    full_data['Tiết quy đổi'] = full_data.apply(calculate_tiet_quy_doi, axis=1)
+
+    summary = full_data.groupby(['GV'], as_index=False).agg(
+        Số_lớp=('HP', 'count'),
+        Tổng_TC=('TC', 'sum'),
+        Tổng_SV=('SV', 'sum'),
+        Tổng_tiết_quy_đổi=('Tiết quy đổi', 'sum')
+    )
+
+    st.header("📊 Khối lượng giảng dạy")
+
+    if che_do == "Tổng hợp giảng dạy":
+        st.dataframe(summary, use_container_width=True)
+    else:
+        st.dataframe(full_data, use_container_width=True)
+
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+        summary.to_excel(writer, sheet_name='Tong_hop', index=False)
+        full_data.to_excel(writer, sheet_name='Chi_tiet', index=False)
+
+    st.sidebar.download_button(
+        "📥 Tải báo cáo Excel",
+        data=buffer.getvalue(),
+        file_name="BaoCaoGiangDay.xlsx"
+    )
+
+if __name__ == "__main__":
+    main()

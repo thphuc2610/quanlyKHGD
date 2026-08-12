@@ -1,0 +1,110 @@
+package edu.tlu.klgd.domain.common;
+
+public final class TeachingRuleConstant {
+    private TeachingRuleConstant() {
+    }
+
+    public static final double CREDIT_TO_STANDARD_HOURS = 15.0;
+    public static final double GRADUATION_INTERNSHIP_HOURS_PER_STUDENT_PER_WEEK = 0.5;
+    public static final double SURVEYING_INTERNSHIP_SMALL_CLASS_LIMIT = 20.0;
+    public static final double SURVEYING_INTERNSHIP_SMALL_CLASS_K = 2.0;
+    public static final double SURVEYING_INTERNSHIP_BASE_K = 2.5;
+    public static final double SURVEYING_INTERNSHIP_BASE_STUDENTS = 25.0;
+    public static final double SURVEYING_INTERNSHIP_INCREMENT_PER_STUDENT = 0.15;
+    public static final double DEFAULT_INTERNSHIP_SMALL_CLASS_LIMIT = 30.0;
+    public static final double DEFAULT_INTERNSHIP_SMALL_CLASS_K = 2.0;
+    public static final double DEFAULT_INTERNSHIP_BASE_K = 2.5;
+    public static final double DEFAULT_INTERNSHIP_BASE_STUDENTS = 35.0;
+    public static final double DEFAULT_INTERNSHIP_INCREMENT_PER_STUDENT = 0.05;
+    public static final double LAB_BASE_K = 0.6;
+    public static final double LAB_BASE_STUDENTS = 25.0;
+    public static final double LAB_INCREMENT_PER_STUDENT = 0.015;
+    public static final double LAB_MIN_K = 0.5;
+    public static final double LAB_MAX_K = 1.2;
+    public static final double PROJECT_BASE_K = 1.1;
+    public static final double PROJECT_BASE_STUDENTS = 40.0;
+    public static final double PROJECT_INCREMENT_PER_STUDENT = 0.01;
+    public static final double PROJECT_MIN_K = 1.0;
+    public static final double PROJECT_MAX_K = 1.5;
+    public static final double DEFAULT_BASE_K = 1.0;
+    public static final double DEFAULT_BASE_STUDENTS = 40.0;
+    public static final double DEFAULT_INCREMENT_PER_STUDENT = 0.01;
+    public static final double DEFAULT_MIN_K = 0.9;
+    public static final double DEFAULT_MAX_K = 1.5;
+    public static final double PHYSICAL_EDUCATION_BASE_STUDENTS = 50.0;
+    public static final double PHYSICAL_EDUCATION_THEORY_BASE_K = 1.0;
+    public static final double PHYSICAL_EDUCATION_THEORY_MIN_K = 0.9;
+    public static final double PHYSICAL_EDUCATION_THEORY_MAX_K = 1.2;
+    public static final double PHYSICAL_EDUCATION_PRACTICE_BASE_K = 0.7;
+    public static final double PHYSICAL_EDUCATION_PRACTICE_MIN_K = 0.6;
+    public static final double PHYSICAL_EDUCATION_PRACTICE_MAX_K = 0.9;
+    public static final double PHYSICAL_EDUCATION_THEORY_HOURS = 20.0;
+    public static final double PHYSICAL_EDUCATION_PRACTICE_HOURS = 10.0;
+    public static final double ROUND_SCALE = 100.0;
+    public static final boolean DEFAULT_DETECT_GUEST_BY_POSITION = false;
+    public static final double DEFAULT_GRADUATION_INTERNSHIP_WEEKS = 28.0;
+    public static final double DEFAULT_INTERNSHIP_DAYS = 2.0;
+    public static final double DEFAULT_SURVEYING_INTERNSHIP_DAYS = 7.0;
+    public static final double MATERIAL_THEORY_HOURS = 42.0;
+    public static final double MATERIAL_LAB_HOURS = 9.0;
+    public static final double SOIL_THEORY_HOURS = 39.0;
+    public static final double SOIL_LAB_HOURS = 6.0;
+    public static final double GEOTECHNICAL_THEORY_HOURS = 57.0;
+    public static final double GEOTECHNICAL_LAB_HOURS = 6.0;
+    public static final double LAB_GROUP_SIZE = 25.0;
+
+    public static final String EXPLANATION_NUMBER_FORMAT_PATTERN = "0.##";
+    public static final String RULE_GUEST_CODE = "THINH_GIANG";
+    public static final String RULE_GUEST_NAME = "Thỉnh giảng";
+    public static final String RULE_GRADUATION_INTERNSHIP_CODE = "THUC_TAP_TOT_NGHIEP";
+    public static final String RULE_GRADUATION_INTERNSHIP_NAME = "Thực tập tốt nghiệp";
+    public static final String RULE_SURVEYING_INTERNSHIP_CODE = "THUC_TAP_TRAC_DIA";
+    public static final String RULE_SURVEYING_INTERNSHIP_NAME = "Thực tập trắc địa";
+    public static final String RULE_DEFAULT_INTERNSHIP_CODE = "THUC_TAP_TRUC_TIEP";
+    public static final String RULE_DEFAULT_INTERNSHIP_NAME = "Thực tập trực tiếp";
+    public static final String RULE_LAB_CODE = "THI_NGHIEM";
+    public static final String RULE_LAB_NAME = "Thí nghiệm";
+    public static final String RULE_PROJECT_CODE = "DO_AN";
+    public static final String RULE_PROJECT_NAME = "Đồ án";
+    public static final String RULE_FOREIGN_LANGUAGE_CODE = "NGOAI_NGU";
+    public static final String RULE_FOREIGN_LANGUAGE_NAME = "Ngoại ngữ";
+    public static final String RULE_PHYSICAL_EDUCATION_CODE = "GDTC";
+    public static final String RULE_PHYSICAL_EDUCATION_NAME = "Giáo dục thể chất";
+    public static final String RULE_DEFAULT_CODE = "LY_THUYET_BAI_TAP";
+    public static final String RULE_DEFAULT_NAME = "Lý thuyết, bài tập";
+    public static final String RULE_MATERIAL_CODE = "VAT_LIEU_XAY_DUNG";
+    public static final String RULE_MATERIAL_NAME = "Vật liệu xây dựng";
+    public static final String RULE_SOIL_CODE = "CO_HOC_DAT";
+    public static final String RULE_SOIL_NAME = "Cơ học đất";
+    public static final String RULE_GEOTECHNICAL_CODE = "DIA_KY_THUAT";
+    public static final String RULE_GEOTECHNICAL_NAME = "Địa kỹ thuật";
+
+    public static final String SUBJECT_GRADUATION_INTERNSHIP = "thuc tap tot nghiep";
+    public static final String SUBJECT_SURVEYING_INTERNSHIP = "thuc tap trac dia";
+    public static final String SUBJECT_INTERNSHIP = "thuc tap";
+    public static final String SUBJECT_LAB = "thi nghiem";
+    public static final String SUBJECT_PROJECT = "do an";
+    public static final String SUBJECT_FOREIGN_LANGUAGE = "ngoai ngu";
+    public static final String SUBJECT_MATERIAL = "vat lieu xay dung";
+    public static final String SUBJECT_MATERIAL_SHORT = "vlxd";
+    public static final String SUBJECT_SOIL = "co hoc dat";
+    public static final String SUBJECT_GEOTECHNICAL = "dia ky thuat";
+    public static final String DEPARTMENT_ENGLISH = "ngon ngu anh";
+    public static final String DEPARTMENT_ENGLISH_SHORT = "tieng anh";
+    public static final String DEPARTMENT_CHINESE = "ngon ngu trung quoc";
+    public static final String DEPARTMENT_PHYSICAL_EDUCATION = "giao duc the chat";
+    public static final String DEPARTMENT_GENERAL_SCIENCE = "khcb";
+    public static final String GUEST_NAME_MARKER = "thg";
+    public static final String GUEST_TEXT_MARKER = "thinh giang";
+    public static final String INVITED_TEACHER_POSITION = "giang vien moi";
+
+    public static final String GUEST_EXPLANATION = "Không nhân hệ số K; tính tín chỉ x 15.";
+    public static final String GRADUATION_INTERNSHIP_EXPLANATION_FORMAT = "0.5 tiết/SV/tuần x %s tuần.";
+    public static final String INTERNSHIP_EXPLANATION_FORMAT = "%s tiết/ngày x %s ngày.";
+    public static final String LAB_EXPLANATION = "K = 0.6 + (SV - 25) x 0.015, chặn trong khoảng [0.5; 1.2].";
+    public static final String PROJECT_EXPLANATION = "K = 1.1 + (SV - 40) x 0.01, chặn trong khoảng [1.0; 1.5].";
+    public static final String DEFAULT_EXPLANATION = "K = 1.0 + (SV - 40) x 0.01, chặn trong khoảng [0.9; 1.5].";
+    public static final String PHYSICAL_EDUCATION_EXPLANATION = "Tách lý thuyết 20 tiết và thực hành 10 tiết.";
+    public static final String SPECIAL_LAB_EXPLANATION_FORMAT =
+        "Lý thuyết/bài tập: %s tiết x Klt; thí nghiệm: %s tiết x Ktn cho từng nhóm %s SV.";
+}
