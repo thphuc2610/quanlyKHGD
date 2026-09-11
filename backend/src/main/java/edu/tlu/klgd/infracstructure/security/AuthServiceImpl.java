@@ -2,6 +2,7 @@ package edu.tlu.klgd.infracstructure.security;
 
 import edu.tlu.klgd.application.dto.*;
 import edu.tlu.klgd.domain.common.ApiMessage;
+import edu.tlu.klgd.domain.common.util.TextNormalizer;
 import edu.tlu.klgd.domain.entity.AppUser;
 import edu.tlu.klgd.domain.entity.UserRole;
 import edu.tlu.klgd.domain.repository.AppUserRepository;
@@ -103,7 +104,7 @@ public class AuthServiceImpl implements AuthService {
         user.setUsername(username);
         user.setPasswordHash(passwordEncoder.encode(request.password()));
         user.setFullName(normalizeRequired(request.fullName()));
-        user.setTeacherName(normalizeOptional(request.teacherName()));
+        user.setTeacherName(normalizeTeacherName(request.teacherName()));
         user.setRoles(request.roles());
         user.setEnabled(request.enabled());
         return toAdminDTO(appUserRepository.save(user));
@@ -116,7 +117,7 @@ public class AuthServiceImpl implements AuthService {
         AppUser user = appUserRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException(ApiMessage.RESOURCE_USER, id));
         user.setFullName(normalizeRequired(request.fullName()));
-        user.setTeacherName(normalizeOptional(request.teacherName()));
+        user.setTeacherName(normalizeTeacherName(request.teacherName()));
         user.setRoles(request.roles());
         user.setEnabled(request.enabled());
         return toAdminDTO(appUserRepository.save(user));
@@ -168,12 +169,17 @@ public class AuthServiceImpl implements AuthService {
         return value.trim();
     }
 
+    private static String normalizeTeacherName(String value) {
+        String teacherName = TextNormalizer.cleanTeacherName(value);
+        return teacherName.isBlank() ? null : teacherName;
+    }
+
     private static AuthUserDTO toDTO(AppUser user) {
         return new AuthUserDTO(
             user.getId(),
             user.getUsername(),
             user.getFullName(),
-            user.getTeacherName(),
+            normalizeTeacherName(user.getTeacherName()),
             user.getEmail(),
             user.getPhone(),
             user.getAvatarUrl(),
@@ -186,7 +192,7 @@ public class AuthServiceImpl implements AuthService {
             user.getId(),
             user.getUsername(),
             user.getFullName(),
-            user.getTeacherName(),
+            normalizeTeacherName(user.getTeacherName()),
             user.getEmail(),
             user.getPhone(),
             user.isEnabled(),
@@ -195,7 +201,7 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private static void validateTeacherLink(java.util.Set<UserRole> roles, String teacherName) {
-        if (roles != null && roles.contains(UserRole.GIANG_VIEN) && normalizeOptional(teacherName) == null) {
+        if (roles != null && roles.contains(UserRole.GIANG_VIEN) && normalizeTeacherName(teacherName) == null) {
             throw new BadRequestException(ApiMessage.TEACHER_ACCOUNT_REQUIRES_LINK);
         }
     }

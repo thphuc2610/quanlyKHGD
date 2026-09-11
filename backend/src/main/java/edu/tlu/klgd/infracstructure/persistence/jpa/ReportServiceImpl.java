@@ -27,6 +27,12 @@ import org.apache.poi.ss.usermodel.VerticalAlignment;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import edu.tlu.klgd.domain.entity.SubjectRuleConfig;
+import edu.tlu.klgd.domain.repository.SubjectRuleConfigRepository;
+import edu.tlu.klgd.domain.common.TeachingRuleConstant;
+import java.util.stream.Collectors;
+import java.util.Map;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,9 +44,12 @@ public class ReportServiceImpl implements ReportService {
     private static final int TEXT_COLUMN_WIDTH = 34;
 
     private final CalculationResultRepository calculationResultRepository;
+    private final SubjectRuleConfigRepository subjectRuleConfigRepository;
 
-    public ReportServiceImpl(CalculationResultRepository calculationResultRepository) {
+    public ReportServiceImpl(CalculationResultRepository calculationResultRepository,
+                             SubjectRuleConfigRepository subjectRuleConfigRepository) {
         this.calculationResultRepository = calculationResultRepository;
+        this.subjectRuleConfigRepository = subjectRuleConfigRepository;
     }
 
     @Override
@@ -54,28 +63,32 @@ public class ReportServiceImpl implements ReportService {
             )
             .toList();
         List<CalculationResult> graduationRows = results.stream().filter(this::isGraduationProject).toList();
-        List<CalculationResult> physicalEducationRows = results.stream().filter(this::isPhysicalEducation).toList();
+        List<CalculationResult> regularRows = results.stream().filter(result -> !isGraduationProject(result)).toList();
+        List<CalculationResult> physicalEducationRows = regularRows.stream().filter(this::isPhysicalEducation).toList();
+        Map<String, String> teacherDisplayNames = teacherDisplayNames(results);
+        Map<String, SubjectRuleConfig> ruleConfigs = subjectRuleConfigRepository.findAll().stream()
+            .collect(Collectors.toMap(SubjectRuleConfig::getCode, config -> config));
 
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             ReportStyles styles = createStyles(workbook);
             String reportAcademicYear = resolveAcademicYear(results);
-            createSummarySheet(workbook, styles, reportAcademicYear, results, graduationRows);
-            createDetailSheet(workbook, styles, ReportConstant.DETAIL_SHEET_NAME, results);
-            createDetailSheet(workbook, styles, ReportConstant.PHYSICAL_EDUCATION_SHEET_NAME, physicalEducationRows);
-            createGraduationProjectSheet(workbook, styles, reportAcademicYear, graduationRows);
+            createSummarySheet(workbook, styles, reportAcademicYear, regularRows, graduationRows, teacherDisplayNames);
+            createDetailSheet(workbook, styles, ReportConstant.DETAIL_SHEET_NAME, regularRows, teacherDisplayNames, ruleConfigs);
+            createDetailSheet(workbook, styles, ReportConstant.PHYSICAL_EDUCATION_SHEET_NAME, physicalEducationRows, teacherDisplayNames, ruleConfigs);
+            createGraduationProjectSheet(workbook, styles, reportAcademicYear, graduationRows, teacherDisplayNames, ruleConfigs);
             workbook.setForceFormulaRecalculation(true);
             workbook.write(output);
             return output.toByteArray();
         }
     }
 
-    private void createSummarySheet(Workbook workbook, ReportStyles styles, String academicYear, List<CalculationResult> regularRows, List<CalculationResult> graduationRows) {
+    private void createSummarySheet(Workbook workbook, ReportStyles styles, String academicYear, List<CalculationResult> regularRows, List<CalculationResult> graduationRows, Map<String, String> teacherDisplayNames) {
         Sheet sheet = workbook.createSheet(ReportConstant.SUMMARY_SHEET_NAME);
         createTitle(sheet, styles, "BẢNG TỔNG HỢP KHỐI LƯỢNG GIẢNG DẠY", "NĂM HỌC " + academicYear, ReportConstant.SUMMARY_HEADERS.length);
         createHeader(sheet, styles.header(), ReportConstant.REPORT_HEADER_ROW_INDEX, ReportConstant.SUMMARY_HEADERS);
 
         int rowIndex = ReportConstant.REPORT_FIRST_DATA_ROW_INDEX;
-        for (String teacherName : teacherNames(regularRows, graduationRows)) {
+        for (String teacherName : teacherNames(regularRows, graduationRows, teacherDisplayNames)) {
             Row row = sheet.createRow(rowIndex);
             int excelRow = rowIndex + 1;
             String teacherCell = "B" + excelRow;
@@ -91,10 +104,10 @@ public class ReportServiceImpl implements ReportService {
                 "SUMIF('" + ReportConstant.DETAIL_SHEET_NAME + "'!B:B," + teacherCell + ",'" + ReportConstant.DETAIL_SHEET_NAME + "'!E:E)",
                 styles.integer());
             writeFormula(row, ReportConstant.SUMMARY_TOTAL_STANDARD_HOURS_COLUMN,
-                "SUMIF('" + ReportConstant.DETAIL_SHEET_NAME + "'!B:B," + teacherCell + ",'" + ReportConstant.DETAIL_SHEET_NAME + "'!J:J)",
+                "SUMIF('" + ReportConstant.DETAIL_SHEET_NAME + "'!B:B," + teacherCell + ",'" + ReportConstant.DETAIL_SHEET_NAME + "'!K:K)",
                 styles.number());
             writeFormula(row, ReportConstant.SUMMARY_GRADUATION_HOURS_COLUMN,
-                "SUMIF('" + ReportConstant.GRADUATION_PROJECT_SHEET_NAME + "'!B:B," + teacherCell + ",'" + ReportConstant.GRADUATION_PROJECT_SHEET_NAME + "'!D:D)",
+                "SUMIF('" + ReportConstant.GRADUATION_PROJECT_SHEET_NAME + "'!B:B," + teacherCell + ",'" + ReportConstant.GRADUATION_PROJECT_SHEET_NAME + "'!E:E)",
                 styles.number());
             writeFormula(row, ReportConstant.SUMMARY_TOTAL_HOURS_COLUMN,
                 "F" + excelRow + "+G" + excelRow,
@@ -105,7 +118,7 @@ public class ReportServiceImpl implements ReportService {
         finishSheet(sheet, ReportConstant.SUMMARY_HEADERS.length);
     }
 
-    private void createDetailSheet(Workbook workbook, ReportStyles styles, String sheetName, List<CalculationResult> rows) {
+    private void createDetailSheet(Workbook workbook, ReportStyles styles, String sheetName, List<CalculationResult> rows, Map<String, String> teacherDisplayNames, Map<String, SubjectRuleConfig> ruleConfigs) {
         Sheet sheet = workbook.createSheet(sheetName);
         createHeader(sheet, styles.header(), 0, ReportConstant.DETAIL_HEADERS);
 
@@ -114,21 +127,27 @@ public class ReportServiceImpl implements ReportService {
             ClassRecord record = result.getClassRecord();
             Row row = sheet.createRow(rowIndex);
             writeNumber(row, ReportConstant.DETAIL_INDEX_COLUMN, rowIndex, styles.integer());
-            writeText(row, ReportConstant.DETAIL_TEACHER_NAME_COLUMN, record.getTeacherName(), styles.text());
+            writeText(row, ReportConstant.DETAIL_TEACHER_NAME_COLUMN, reportTeacherName(record, teacherDisplayNames), styles.text());
             writeText(row, ReportConstant.DETAIL_CLASS_NAME_COLUMN, record.getClassName(), styles.text());
             writeNumber(row, ReportConstant.DETAIL_CREDITS_COLUMN, value(record.getCredits()), styles.number());
             writeNumber(row, ReportConstant.DETAIL_STUDENT_COUNT_COLUMN, value(record.getStudentCount()), styles.integer());
             if (ReportConstant.PHYSICAL_EDUCATION_SHEET_NAME.equals(sheetName)) {
-                writeText(row, ReportConstant.DETAIL_DEPARTMENT_PH_COLUMN, record.getDepartmentPh(), styles.text());
+                writeText(row, ReportConstant.DETAIL_DEPARTMENT_PH_COLUMN, TextNormalizer.cleanDepartmentName(record.getDepartmentPh()), styles.text());
                 writeText(row, ReportConstant.DETAIL_UNIT_COLUMN, record.getUnitName(), styles.text());
+                writeNullableNumber(row, ReportConstant.DETAIL_COEFFICIENT_K_COLUMN, null, styles.number());
                 writeNumber(row, ReportConstant.DETAIL_COEFFICIENT_THEORY_COLUMN, physicalEducationTheoryCoefficient(result), styles.number());
                 writeNumber(row, ReportConstant.DETAIL_COEFFICIENT_PRACTICE_COLUMN, physicalEducationPracticeCoefficient(result), styles.number());
                 int excelRow = rowIndex + 1;
-                writeFormula(row, ReportConstant.DETAIL_STANDARD_HOURS_COLUMN, "H" + excelRow + "*10+I" + excelRow + "*20", styles.number());
+                SubjectRuleConfig rule = ruleConfigs.get(result.getRuleCode());
+                String formula = (rule != null && rule.getFormula() != null && !rule.getFormula().isBlank()) 
+                    ? convertToDetailExcelFormula(rule.getFormula(), excelRow) 
+                    : "I" + excelRow + "*10+J" + excelRow + "*20";
+                writeFormula(row, ReportConstant.DETAIL_STANDARD_HOURS_COLUMN, formula, styles.number());
             } else {
-                writeText(row, ReportConstant.DETAIL_DEPARTMENT_PH_COLUMN, record.getDepartmentPh(), styles.text());
+                writeText(row, ReportConstant.DETAIL_DEPARTMENT_PH_COLUMN, TextNormalizer.cleanDepartmentName(record.getDepartmentPh()), styles.text());
                 writeText(row, ReportConstant.DETAIL_UNIT_COLUMN, record.getUnitName(), styles.text());
-                writeNullableNumber(row, ReportConstant.DETAIL_COEFFICIENT_THEORY_COLUMN, coefficientTheory(result), styles.number());
+                writeNullableNumber(row, ReportConstant.DETAIL_COEFFICIENT_K_COLUMN, result.getCoefficientK(), styles.number());
+                writeNullableNumber(row, ReportConstant.DETAIL_COEFFICIENT_THEORY_COLUMN, result.getCoefficientTheory(), styles.number());
                 writeNullableNumber(row, ReportConstant.DETAIL_COEFFICIENT_PRACTICE_COLUMN, result.getCoefficientPractice(), styles.number());
                 writeNumber(row, ReportConstant.DETAIL_STANDARD_HOURS_COLUMN, value(result.getStandardHours()), styles.number());
             }
@@ -137,41 +156,36 @@ public class ReportServiceImpl implements ReportService {
         finishSheet(sheet, ReportConstant.DETAIL_HEADERS.length);
     }
 
-    private void createGraduationProjectSheet(Workbook workbook, ReportStyles styles, String academicYear, List<CalculationResult> rows) {
+    private void createGraduationProjectSheet(Workbook workbook, ReportStyles styles, String academicYear, List<CalculationResult> rows, Map<String, String> teacherDisplayNames, Map<String, SubjectRuleConfig> ruleConfigs) {
         Sheet sheet = workbook.createSheet(ReportConstant.GRADUATION_PROJECT_SHEET_NAME);
         createTitle(sheet, styles, "BẢNG TỔNG HỢP KHỐI LƯỢNG HỌC PHẦN TỐT NGHIỆP", "NĂM HỌC " + academicYear, ReportConstant.GRADUATION_PROJECT_HEADERS.length);
         createHeader(sheet, styles.header(), ReportConstant.REPORT_HEADER_ROW_INDEX, ReportConstant.GRADUATION_PROJECT_HEADERS);
-        Row headerRow = sheet.getRow(ReportConstant.REPORT_HEADER_ROW_INDEX);
-        writeText(headerRow, ReportConstant.GRADUATION_HK1_COLUMN, ReportConstant.EMPTY_CELL_VALUE, styles.header());
-        writeText(headerRow, ReportConstant.GRADUATION_HK2_COLUMN, ReportConstant.EMPTY_CELL_VALUE, styles.header());
 
         int rowIndex = ReportConstant.REPORT_FIRST_DATA_ROW_INDEX;
         int index = 1;
-        for (GraduationDepartmentGroup group : graduationSummaries(rows)) {
-            Row groupRow = sheet.createRow(rowIndex++);
-            writeText(groupRow, ReportConstant.GRADUATION_INDEX_COLUMN, group.departmentName(), styles.header());
-            writeText(groupRow, ReportConstant.GRADUATION_HK1_COLUMN, "HK1", styles.header());
-            writeText(groupRow, ReportConstant.GRADUATION_HK2_COLUMN, "HK2", styles.header());
-
+        for (GraduationDepartmentGroup group : graduationSummaries(rows, teacherDisplayNames)) {
             for (GraduationSummary item : group.items()) {
                 Row row = sheet.createRow(rowIndex);
                 int excelRow = rowIndex + 1;
                 writeNumber(row, ReportConstant.GRADUATION_INDEX_COLUMN, index++, styles.integer());
                 writeText(row, ReportConstant.GRADUATION_TEACHER_NAME_COLUMN, item.teacherName(), styles.text());
-                writeFormula(row, ReportConstant.GRADUATION_STUDENT_TOTAL_COLUMN, "G" + excelRow + "+I" + excelRow, styles.number());
-                writeFormula(row, ReportConstant.GRADUATION_HOURS_COLUMN, "C" + excelRow + "*14", styles.number());
+                writeText(row, ReportConstant.GRADUATION_DEPARTMENT_COLUMN, group.departmentName(), styles.text());
+                writeNumber(row, ReportConstant.GRADUATION_STUDENT_TOTAL_COLUMN, item.totalStudents(), styles.number());
+                SubjectRuleConfig rule = ruleConfigs.get(TeachingRuleConstant.RULE_GRADUATION_PROJECT_CODE);
+                String formula = (rule != null && rule.getFormula() != null && !rule.getFormula().isBlank())
+                    ? convertToGraduationExcelFormula(rule.getFormula(), excelRow)
+                    : "D" + excelRow + "*14";
+                writeFormula(row, ReportConstant.GRADUATION_HOURS_COLUMN, formula, styles.number());
                 writeText(row, ReportConstant.GRADUATION_NOTE_COLUMN, ReportConstant.EMPTY_CELL_VALUE, styles.text());
-                writeNumber(row, ReportConstant.GRADUATION_HK1_COLUMN, item.hk1Students(), styles.number());
-                writeNumber(row, ReportConstant.GRADUATION_HK2_COLUMN, item.hk2Students(), styles.number());
                 rowIndex++;
             }
         }
         finishSheet(sheet, ReportConstant.GRADUATION_PROJECT_HEADERS.length);
     }
 
-    private List<String> teacherNames(List<CalculationResult> regularRows, List<CalculationResult> graduationRows) {
+    private List<String> teacherNames(List<CalculationResult> regularRows, List<CalculationResult> graduationRows, Map<String, String> teacherDisplayNames) {
         return java.util.stream.Stream.concat(regularRows.stream(), graduationRows.stream())
-            .map(result -> result.getClassRecord().getTeacherName())
+            .map(result -> reportTeacherName(result.getClassRecord(), teacherDisplayNames))
             .filter(Objects::nonNull)
             .filter(value -> !value.isBlank())
             .distinct()
@@ -179,7 +193,7 @@ public class ReportServiceImpl implements ReportService {
             .toList();
     }
 
-    private List<GraduationDepartmentGroup> graduationSummaries(List<CalculationResult> rows) {
+    private List<GraduationDepartmentGroup> graduationSummaries(List<CalculationResult> rows, Map<String, String> teacherDisplayNames) {
         Map<String, Map<String, GraduationSummaryBuilder>> grouped = new LinkedHashMap<>();
         rows.stream()
             .sorted(
@@ -192,11 +206,13 @@ public class ReportServiceImpl implements ReportService {
                     graduationDepartmentName(record),
                     key -> new LinkedHashMap<>()
                 );
-                GraduationSummaryBuilder builder = departmentGroup.computeIfAbsent(record.getTeacherName(), GraduationSummaryBuilder::new);
+                String teacherName = reportTeacherName(record, teacherDisplayNames);
+                GraduationSummaryBuilder builder = departmentGroup.computeIfAbsent(teacherName, GraduationSummaryBuilder::new);
+                double convertedStudents = graduationConvertedStudents(result);
                 if (isSemesterTwo(record.getSemester())) {
-                    builder.hk2Students += value(record.getStudentCount());
+                    builder.hk2Students += convertedStudents;
                 } else {
-                    builder.hk1Students += value(record.getStudentCount());
+                    builder.hk1Students += convertedStudents;
                 }
             });
         return grouped.entrySet().stream()
@@ -333,7 +349,11 @@ public class ReportServiceImpl implements ReportService {
     }
 
     private boolean isGraduationProject(CalculationResult result) {
-        return TeachingRuleConstant.RULE_GRADUATION_INTERNSHIP_CODE.equals(result.getRuleCode());
+        return TeachingRuleConstant.RULE_GRADUATION_PROJECT_CODE.equals(result.getRuleCode());
+    }
+
+    private static double graduationConvertedStudents(CalculationResult result) {
+        return round(value(result.getStandardHours()) / TeachingRuleConstant.GRADUATION_PROJECT_TECHNICAL_HOURS_PER_STUDENT);
     }
 
     private static boolean matchesTerm(ClassRecord record, String academicYear, String semester) {
@@ -350,12 +370,8 @@ public class ReportServiceImpl implements ReportService {
         return normalizedValue.equals("ca nam") || normalizedValue.equals("all year");
     }
 
-    private static Double coefficientTheory(CalculationResult result) {
-        return result.getCoefficientTheory() == null ? result.getCoefficientK() : result.getCoefficientTheory();
-    }
-
     private static double physicalEducationTheoryCoefficient(CalculationResult result) {
-        Double coefficient = coefficientTheory(result);
+        Double coefficient = result.getCoefficientTheory();
         if (coefficient != null) {
             return coefficient;
         }
@@ -399,11 +415,53 @@ public class ReportServiceImpl implements ReportService {
         if (departmentName.isBlank()) {
             departmentName = text(record.getDepartmentHn());
         }
+        departmentName = TextNormalizer.cleanDepartmentName(departmentName);
         if (departmentName.isBlank()) {
             return "Bộ môn";
         }
         String lowerName = departmentName.toLowerCase();
         return lowerName.startsWith("bộ môn") || lowerName.startsWith("bo mon") ? departmentName : "Bộ môn " + departmentName;
+    }
+
+    private static Map<String, String> teacherDisplayNames(List<CalculationResult> results) {
+        Map<String, String> names = new LinkedHashMap<>();
+        results.stream()
+            .map(result -> cleanTeacherName(result.getClassRecord()))
+            .filter(value -> !value.isBlank())
+            .forEach(name -> names.merge(TextNormalizer.normalize(name), name, ReportServiceImpl::preferredTeacherName));
+        return names;
+    }
+
+    private static String reportTeacherName(ClassRecord record, Map<String, String> teacherDisplayNames) {
+        String teacherName = cleanTeacherName(record);
+        return teacherDisplayNames.getOrDefault(TextNormalizer.normalize(teacherName), teacherName);
+    }
+
+    private static String cleanTeacherName(ClassRecord record) {
+        String teacherName = text(record.getTeacherName());
+        if (teacherName.isBlank()) {
+            teacherName = text(record.getTeacherOriginalName());
+        }
+        return TextNormalizer.cleanTeacherName(teacherName);
+    }
+
+    private static String preferredTeacherName(String current, String candidate) {
+        int comparison = Integer.compare(teacherNameScore(candidate), teacherNameScore(current));
+        return comparison > 0 || (comparison == 0 && candidate.compareToIgnoreCase(current) < 0) ? candidate : current;
+    }
+
+    private static int teacherNameScore(String value) {
+        int score = 0;
+        if (!value.matches(".*[.,;:]+.*")) {
+            score += 2;
+        }
+        return score + accentScore(value);
+    }
+
+    private static int accentScore(String value) {
+        return (int) value.chars()
+            .filter(character -> character > 127 && character != '\uFFFD')
+            .count();
     }
 
     private static long value(Integer value) {
@@ -426,10 +484,26 @@ public class ReportServiceImpl implements ReportService {
         return value == null ? "" : value.trim();
     }
 
+    private static String convertToDetailExcelFormula(String formula, int excelRow) {
+        return formula.replaceAll("(?i)\\bTC\\b", "D" + excelRow)
+                      .replaceAll("(?i)\\bSV\\b", "E" + excelRow)
+                      .replaceAll("(?i)\\bK_lt\\b", "I" + excelRow)
+                      .replaceAll("(?i)\\bK_th\\b", "J" + excelRow)
+                      .replaceAll("(?i)\\bK\\b", "H" + excelRow);
+    }
+
+    private static String convertToGraduationExcelFormula(String formula, int excelRow) {
+        return formula.replaceAll("(?i)\\bTC\\b", "D" + excelRow)
+                      .replaceAll("(?i)\\bSV\\b", "D" + excelRow);
+    }
+
     private record ReportStyles(CellStyle title, CellStyle subtitle, CellStyle header, CellStyle text, CellStyle integer, CellStyle number) {
     }
 
     private record GraduationSummary(String teacherName, double hk1Students, double hk2Students) {
+        private double totalStudents() {
+            return round(hk1Students + hk2Students);
+        }
     }
 
     private record GraduationDepartmentGroup(String departmentName, List<GraduationSummary> items) {

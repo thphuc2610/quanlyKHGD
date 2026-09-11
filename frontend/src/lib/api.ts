@@ -3,7 +3,7 @@ import { clearStoredSession, readStoredSession } from '../features/auth/auth.sto
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? '',
-  timeout: 30000,
+  timeout: 300000,
   headers: {
     Accept: 'application/json'
   }

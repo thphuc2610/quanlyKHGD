@@ -10,7 +10,7 @@ public final class TeachingRuleConstant {
     public static final double SURVEYING_INTERNSHIP_SMALL_CLASS_K = 2.0;
     public static final double SURVEYING_INTERNSHIP_BASE_K = 2.5;
     public static final double SURVEYING_INTERNSHIP_BASE_STUDENTS = 25.0;
-    public static final double SURVEYING_INTERNSHIP_INCREMENT_PER_STUDENT = 0.15;
+    public static final double SURVEYING_INTERNSHIP_INCREMENT_PER_STUDENT = 0.05;
     public static final double DEFAULT_INTERNSHIP_SMALL_CLASS_LIMIT = 30.0;
     public static final double DEFAULT_INTERNSHIP_SMALL_CLASS_K = 2.0;
     public static final double DEFAULT_INTERNSHIP_BASE_K = 2.5;
@@ -43,13 +43,18 @@ public final class TeachingRuleConstant {
     public static final double ROUND_SCALE = 100.0;
     public static final boolean DEFAULT_DETECT_GUEST_BY_POSITION = false;
     public static final double DEFAULT_GRADUATION_INTERNSHIP_WEEKS = 28.0;
+    public static final double INDUSTRY_INTERNSHIP_HOURS_PER_STUDENT_PER_WEEK = 0.5;
+    public static final double BUSINESS_ADMINISTRATION_INTERNSHIP_WEEKS = 3.0;
+    public static final double INFORMATION_TECHNOLOGY_INTERNSHIP_WEEKS = 4.0;
+    public static final double GRADUATION_PROJECT_TECHNICAL_HOURS_PER_STUDENT = 14.0;
+    public static final double GRADUATION_PROJECT_OTHER_FACTOR = 0.8;
     public static final double DEFAULT_INTERNSHIP_DAYS = 2.0;
     public static final double DEFAULT_SURVEYING_INTERNSHIP_DAYS = 7.0;
     public static final double MATERIAL_THEORY_HOURS = 42.0;
     public static final double MATERIAL_LAB_HOURS = 9.0;
     public static final double SOIL_THEORY_HOURS = 39.0;
     public static final double SOIL_LAB_HOURS = 6.0;
-    public static final double GEOTECHNICAL_THEORY_HOURS = 57.0;
+    public static final double GEOTECHNICAL_THEORY_HOURS = 54.0;
     public static final double GEOTECHNICAL_LAB_HOURS = 6.0;
     public static final double LAB_GROUP_SIZE = 25.0;
 
@@ -57,7 +62,11 @@ public final class TeachingRuleConstant {
     public static final String RULE_GUEST_CODE = "THINH_GIANG";
     public static final String RULE_GUEST_NAME = "Thỉnh giảng";
     public static final String RULE_GRADUATION_INTERNSHIP_CODE = "THUC_TAP_TOT_NGHIEP";
-    public static final String RULE_GRADUATION_INTERNSHIP_NAME = "Thực tập tốt nghiệp";
+    public static final String RULE_GRADUATION_INTERNSHIP_NAME = "Thực tập nghề nghiệp/tốt nghiệp";
+    public static final String RULE_GRADUATION_PROJECT_CODE = "HPTN";
+    public static final String RULE_GRADUATION_PROJECT_NAME = "Học phần tốt nghiệp";
+    public static final String RULE_INDUSTRY_INTERNSHIP_CODE = "THUC_TAP_NGANH";
+    public static final String RULE_INDUSTRY_INTERNSHIP_NAME = "Thực tập ngành";
     public static final String RULE_SURVEYING_INTERNSHIP_CODE = "THUC_TAP_TRAC_DIA";
     public static final String RULE_SURVEYING_INTERNSHIP_NAME = "Thực tập trắc địa";
     public static final String RULE_DEFAULT_INTERNSHIP_CODE = "THUC_TAP_TRUC_TIEP";
@@ -80,6 +89,10 @@ public final class TeachingRuleConstant {
     public static final String RULE_GEOTECHNICAL_NAME = "Địa kỹ thuật";
 
     public static final String SUBJECT_GRADUATION_INTERNSHIP = "thuc tap tot nghiep";
+    public static final String SUBJECT_PROFESSIONAL_INTERNSHIP = "thuc tap nghe nghiep";
+    public static final String SUBJECT_GRADUATION_PROJECT = "hoc phan tot nghiep";
+    public static final String SUBJECT_GRADUATION_PROJECT_SHORT = "hptn";
+    public static final String SUBJECT_INDUSTRY_INTERNSHIP = "thuc tap nganh";
     public static final String SUBJECT_SURVEYING_INTERNSHIP = "thuc tap trac dia";
     public static final String SUBJECT_INTERNSHIP = "thuc tap";
     public static final String SUBJECT_LAB = "thi nghiem";
@@ -94,17 +107,25 @@ public final class TeachingRuleConstant {
     public static final String DEPARTMENT_CHINESE = "ngon ngu trung quoc";
     public static final String DEPARTMENT_PHYSICAL_EDUCATION = "giao duc the chat";
     public static final String DEPARTMENT_GENERAL_SCIENCE = "khcb";
+    public static final String MAJOR_BUSINESS_ADMINISTRATION = "quan tri kinh doanh";
+    public static final String MAJOR_BUSINESS_ADMINISTRATION_SHORT = "qtkd";
+    public static final String MAJOR_INFORMATION_TECHNOLOGY = "cong nghe thong tin";
+    public static final String MAJOR_INFORMATION_TECHNOLOGY_SHORT = "cntt";
+    public static final String MAJOR_TECHNICAL = "ky thuat";
+    public static final String MAJOR_TECHNOLOGY = "cong nghe";
     public static final String GUEST_NAME_MARKER = "thg";
     public static final String GUEST_TEXT_MARKER = "thinh giang";
     public static final String INVITED_TEACHER_POSITION = "giang vien moi";
 
     public static final String GUEST_EXPLANATION = "Không nhân hệ số K; tính tín chỉ x 15.";
     public static final String GRADUATION_INTERNSHIP_EXPLANATION_FORMAT = "0.5 tiết/SV/tuần x %s tuần.";
+    public static final String GRADUATION_PROJECT_EXPLANATION_FORMAT = "%s SV x 14 x hệ số Bộ môn %s x hệ số hướng dẫn %s.";
+    public static final String INDUSTRY_INTERNSHIP_EXPLANATION_FORMAT = "0.5 tiết/SV/tuần x %s tuần; tương đương %s tiết/SV.";
     public static final String INTERNSHIP_EXPLANATION_FORMAT = "%s tiết/ngày x %s ngày.";
-    public static final String LAB_EXPLANATION = "K = 0.6 + (SV - 25) x 0.015, chặn trong khoảng [0.5; 1.2].";
+    public static final String LAB_EXPLANATION = "K = 0.6 + (0.6 + (SV - 25 - 25) x 0.015).";
     public static final String PROJECT_EXPLANATION = "K = 1.1 + (SV - 40) x 0.01, chặn trong khoảng [1.0; 1.5].";
     public static final String DEFAULT_EXPLANATION = "K = 1.0 + (SV - 40) x 0.01, chặn trong khoảng [0.9; 1.5].";
     public static final String PHYSICAL_EDUCATION_EXPLANATION = "Tách lý thuyết 20 tiết và thực hành 10 tiết.";
     public static final String SPECIAL_LAB_EXPLANATION_FORMAT =
-        "Lý thuyết/bài tập: %s tiết x Klt; thí nghiệm: %s tiết x Ktn cho từng nhóm %s SV.";
+        "Lý thuyết/bài tập: %s tiết x Klt; thí nghiệm: %s tiết x Kth; Kth = max(0.5, 0.6 + (SV - 25) x 0.015).";
 }

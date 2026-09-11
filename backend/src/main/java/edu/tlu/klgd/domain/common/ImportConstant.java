@@ -10,6 +10,8 @@ public final class ImportConstant {
     public static final String DEFAULT_UPLOAD_FILE_NAME = "upload.xlsx";
     public static final String EXCEL_XLSX_EXTENSION = ".xlsx";
     public static final String EXCEL_XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    public static final String PDF_EXTENSION = ".pdf";
+    public static final String PDF_MEDIA_TYPE = "application/pdf";
     public static final String CLASS_NAME_FIELD = "className";
     public static final String SUBJECT_NAME_FIELD = "subjectName";
     public static final String CREDITS_FIELD = "credits";
@@ -28,6 +30,7 @@ public final class ImportConstant {
     public static final String SINGLE_SPACE = " ";
     public static final String MULTIPLE_WHITESPACE_REGEX = "\\s+";
     public static final String GUEST_TEACHER_NAME_REGEX = "(?i)\\((thg|a|moi|thinh giang).*?\\)";
+    public static final String TEACHER_ACADEMIC_PREFIX_REGEX = "(?iu)^\\s*(?:(?:GS|PGS|TS|ThS|CN|KS)\\.?\\s*)+";
     public static final int HEADER_ROW_MIN_PHYSICAL_ROWS = 1;
     public static final int MAX_HEADER_SCAN_ROWS = 10;
     public static final int NEXT_ROW_OFFSET = 1;

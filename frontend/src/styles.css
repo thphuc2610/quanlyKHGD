@@ -1376,6 +1376,16 @@ h5.ant-typography {
   min-width: 180px;
 }
 
+.formula-note-card .ant-card-body {
+  padding: 14px 18px;
+}
+
+.formula-note-text {
+  margin: 6px 0 0 !important;
+  color: var(--brand-muted);
+  line-height: 1.6;
+}
+
 .rules-filter-toolbar .ant-btn {
   min-height: 48px;
   height: 48px;

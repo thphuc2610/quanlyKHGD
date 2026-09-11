@@ -37,6 +37,7 @@ thead tr th {
 def normalize_name(name):
     name = str(name)
     name = re.sub(r"\(.*?\)", "", name)
+    name = re.sub(r"^\s*(?:(?:GS|PGS|TS|ThS|CN|KS)\.?\s*)+", "", name, flags=re.IGNORECASE)
     name = re.sub(r"\s+", " ", name)
     return name.strip()
 
@@ -72,8 +73,8 @@ def calculate_k(row):
         return round(max(0.9, min(1.2, k)), 2)
 
     if 'thí nghiệm' in ten_mon:
-        k = 0.6 + (sv - 25) * 0.015
-        return round(max(0.5, min(1.2, k)), 2)
+        k = 0.6 + (0.6 + (sv - 25 - 25) * 0.015)
+        return round(k, 2)
 
     if 'thực tập trắc địa' in ten_mon:
         if sv < 20:
@@ -81,8 +82,8 @@ def calculate_k(row):
         k = 2.5 + (sv - 25) * 0.05
         return round(k, 2)
 
-    if 'thực tập tốt nghiệp' in ten_mon:
-        return round(0.5 * sv, 2)
+    if 'thực tập tốt nghiệp' in ten_mon or 'thực tập nghề nghiệp' in ten_mon:
+        return 0.5
 
     if 'thực tập' in ten_mon:
         if sv < 30:
@@ -107,8 +108,8 @@ def calculate_tiet_quy_doi(row):
     if 'thực tập trắc địa' in ten_mon:
         return round(k * 7, 2)
 
-    if 'thực tập tốt nghiệp' in ten_mon:
-        return round(k * 2, 2)
+    if 'thực tập tốt nghiệp' in ten_mon or 'thực tập nghề nghiệp' in ten_mon:
+        return round(k * sv * tc, 2)
 
     if 'thực tập' in ten_mon:
         return round(k * 2, 2)

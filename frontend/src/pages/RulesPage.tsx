@@ -6,6 +6,8 @@ import PageHeader from '../components/PageHeader';
 import { smallPagination, sttColumn } from '../constants/table';
 import {
   DEFAULT_WORKLOAD_RULES,
+  FORMULA_VARIABLES,
+  FORMULA_VARIABLE_NOTE,
   buildCalculationSettings,
   readWorkloadRules,
   readSystemSettings,
@@ -24,6 +26,17 @@ import { antSelectFilterOption, searchMatches } from '../utils/search';
 
 const formatNumber = (value?: number) => Number(value ?? 0).toLocaleString('vi-VN', { maximumFractionDigits: 2 });
 const DELETED_RULES_STORAGE_KEY = 'klgd_deleted_subject_rules';
+const FORMULA_VARIABLE_BUTTONS = [
+  FORMULA_VARIABLES.students,
+  FORMULA_VARIABLES.groupStudents,
+  FORMULA_VARIABLES.credits,
+  FORMULA_VARIABLES.weeks,
+  FORMULA_VARIABLES.days,
+  FORMULA_VARIABLES.advisorShare,
+  FORMULA_VARIABLES.commonK,
+  FORMULA_VARIABLES.theoryK,
+  FORMULA_VARIABLES.practiceK
+].map((variableName) => ({ label: variableName, insert: variableName }));
 const MATH_BUTTONS = [
   { label: 'x²', insert: '²' },
   { label: 'x□', insert: '^()' },
@@ -44,14 +57,10 @@ const MATH_BUTTONS = [
   { label: 'max()', insert: 'max()' },
   { label: '√()', insert: '√()' },
   { label: 'Σ', insert: 'Σ' },
-  { label: 'SV', insert: 'SV' },
-  { label: 'SV_nhom', insert: 'SV_nhom' },
-  { label: 'TC', insert: 'TC' },
-  { label: 'K', insert: 'K' },
-  { label: 'K_lt', insert: 'K_lt' },
-  { label: 'K_th', insert: 'K_th' }
+  ...FORMULA_VARIABLE_BUTTONS
 ];
 type RuleRow = WorkloadRule & {
+  coefficientFormula: string;
   coefficientTheoryFormula: string;
   coefficientPracticeFormula: string;
   standardHoursFormula: string;
@@ -61,6 +70,7 @@ type RuleRow = WorkloadRule & {
 
 type RuleFormValues = WorkloadRule & {
   subjectChoice?: string;
+  coefficientFormula?: string;
   coefficientTheoryFormula?: string;
   coefficientPracticeFormula?: string;
   standardHoursFormula?: string;
@@ -68,13 +78,15 @@ type RuleFormValues = WorkloadRule & {
 
 type RulesExcelRow = {
   'Môn áp dụng'?: string;
+  K?: string;
   K_lt?: string;
   K_th?: string;
+  'Công thức GC'?: string;
   'Công thức giờ chuẩn'?: string;
   'Ghi chú'?: string;
 };
 
-const RULE_EXCEL_HEADERS: Array<keyof RulesExcelRow> = ['Môn áp dụng', 'K_lt', 'K_th', 'Công thức giờ chuẩn', 'Ghi chú'];
+const RULE_EXCEL_HEADERS: Array<keyof RulesExcelRow> = ['Môn áp dụng', 'K', 'K_lt', 'K_th', 'Công thức GC', 'Ghi chú'];
 
 function normalizeMathFormula(value?: string) {
   return (value ?? '')
@@ -152,7 +164,7 @@ function combinedFormula(rule: WorkloadRule) {
 }
 
 function isStandardHoursLine(line: string) {
-  return /giờ chuẩn|gio chuan/i.test(line);
+  return /giờ chuẩn|gio chuan|\bGC\b/i.test(line);
 }
 
 function isPracticeKLine(line: string) {
@@ -163,15 +175,21 @@ function isTheoryKLine(line: string) {
   return /\bK_lt\b|\bKlt\b|lý thuyết|ly thuyet/i.test(line);
 }
 
+function isGeneralKLine(line: string) {
+  return /^\s*K\s*=/.test(line);
+}
+
 function splitRuleColumns(rule: WorkloadRule, classCount: number, totalStandardHours: number): RuleRow {
   const lines = formulaLines(combinedFormula(rule));
   const nonStandardLines = lines.filter((line) => !isStandardHoursLine(line));
   const storedTheory = normalizeMathFormula(rule.coefficientTheoryFormula ?? '');
   const storedPractice = normalizeMathFormula(rule.coefficientPracticeFormula ?? '');
-  const theoryLine = storedTheory || nonStandardLines.find(isTheoryKLine) || nonStandardLines.find((line) => !isPracticeKLine(line)) || '';
+  const generalLine = nonStandardLines.find(isGeneralKLine) || '';
+  const theoryLine = storedTheory || nonStandardLines.find(isTheoryKLine) || '';
   const practiceLine = storedPractice || nonStandardLines.find(isPracticeKLine) || '';
   return {
     ...rule,
+    coefficientFormula: generalLine,
     coefficientTheoryFormula: theoryLine,
     coefficientPracticeFormula: practiceLine,
     standardHoursFormula: lines.filter(isStandardHoursLine).join('; '),
@@ -275,9 +293,10 @@ function ruleToExcelRow(rule: WorkloadRule): RulesExcelRow {
   const columns = splitRuleColumns(rule, 0, 0);
   return {
     'Môn áp dụng': rule.name,
+    K: columns.coefficientFormula,
     K_lt: columns.coefficientTheoryFormula,
     K_th: columns.coefficientPracticeFormula,
-    'Công thức giờ chuẩn': columns.standardHoursFormula,
+    'Công thức GC': columns.standardHoursFormula,
     'Ghi chú': rule.note ?? ''
   };
 }
@@ -285,9 +304,10 @@ function ruleToExcelRow(rule: WorkloadRule): RulesExcelRow {
 function excelRowToRule(row: RulesExcelRow): WorkloadRule | null {
   const name = textCell(row['Môn áp dụng']);
   const code = codeFromSubjectName(name);
+  const coefficientFormula = normalizeMathFormula(textCell(row.K));
   const coefficientTheoryFormula = normalizeMathFormula(textCell(row.K_lt));
   const coefficientPracticeFormula = normalizeMathFormula(textCell(row.K_th));
-  const formula = normalizeMathFormula(textCell(row['Công thức giờ chuẩn']));
+  const formula = normalizeMathFormula(textCell(row['Công thức GC'] || row['Công thức giờ chuẩn']));
   if (!name || !formula) {
     return null;
   }
@@ -296,7 +316,7 @@ function excelRowToRule(row: RulesExcelRow): WorkloadRule | null {
     name,
     coefficientTheoryFormula,
     coefficientPracticeFormula,
-    formula,
+    formula: [coefficientFormula, formula].filter(Boolean).join('; '),
     note: textCell(row['Ghi chú']),
     editable: true
   };
@@ -316,6 +336,7 @@ function buildRulesWorkbook(rows: RulesExcelRow[], includeGuide = false) {
     { wch: 48 },
     { wch: 48 },
     { wch: 48 },
+    { wch: 48 },
     { wch: 56 }
   ];
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Quy tắc');
@@ -324,15 +345,16 @@ function buildRulesWorkbook(rows: RulesExcelRow[], includeGuide = false) {
     const guide = XLSX.utils.aoa_to_sheet([
       ['Hướng dẫn import quy tắc tính'],
       ['Môn áp dụng', 'Bắt buộc. Nhập đúng tên môn/học phần muốn áp dụng.'],
+      ['K', 'Không bắt buộc. Dùng cho hệ số chung. Ví dụ: K = min(max(1.0 + (SV - 40) × 0.01, 0.9), 1.5)'],
       ['K_lt', 'Không bắt buộc. Ví dụ: K_lt = min(max(1.0 + (SV - 40) × 0.01, 0.9), 1.5)'],
-      ['K_th', 'Không bắt buộc. Ví dụ: K_th = min(max(0.6 + (SV_nhom - 25) × 0.015, 0.5), 1.2)'],
-      ['Công thức giờ chuẩn', 'Bắt buộc. Ví dụ: Giờ chuẩn = TC × 15 × K'],
+      ['K_th', 'Không bắt buộc. Ví dụ: K_th = max(0.6 + (SV - 25) × 0.015, 0.5)'],
+      ['Công thức GC', 'Bắt buộc. Ví dụ: GC = 42 × K_lt + 9 × K_th'],
       ['Ghi chú', 'Không bắt buộc.'],
       [],
       ['Quy ước biến trong công thức'],
       ['SV', 'Số sinh viên của lớp/học phần.'],
       ['SV_nhom', 'Số sinh viên trong một nhóm thí nghiệm/thực hành.'],
-      ['TC', 'Số tín chỉ.'],
+      ['TC', 'Tín chỉ.'],
       ['K', 'Hệ số K chung.'],
       ['K_lt', 'Hệ số phần lý thuyết.'],
       ['K_th', 'Hệ số phần thực hành/thí nghiệm.'],
@@ -349,7 +371,7 @@ function buildRulesWorkbook(rows: RulesExcelRow[], includeGuide = false) {
       ['Lưu ý'],
       ['Không tự đặt biến mới', 'Nếu dùng chữ viết tắt khác ngoài danh sách trên, hệ thống không hiểu đúng công thức.'],
       ['Dấu ngoặc', 'Các hàm như min(), max(), √() phải có đủ mở và đóng ngoặc.'],
-      ['Công thức giờ chuẩn', 'Nên bắt đầu bằng "Giờ chuẩn = ..." để hệ thống nhận diện cột giờ chuẩn.']
+      ['Công thức GC', 'Nên bắt đầu bằng "GC = ..." để hệ thống nhận diện cột GC.']
     ]);
     guide['!cols'] = [{ wch: 24 }, { wch: 90 }];
     XLSX.utils.book_append_sheet(workbook, guide, 'Hướng dẫn');
@@ -371,7 +393,7 @@ export default function RulesPage() {
   const [usageFilter, setUsageFilter] = useState<string>();
   const [editingRule, setEditingRule] = useState<WorkloadRule | null>(null);
   const [showMathKeyboard, setShowMathKeyboard] = useState(false);
-  const [activeFormulaField, setActiveFormulaField] = useState<'coefficientTheoryFormula' | 'coefficientPracticeFormula' | 'standardHoursFormula'>('coefficientTheoryFormula');
+  const [activeFormulaField, setActiveFormulaField] = useState<'coefficientFormula' | 'coefficientTheoryFormula' | 'coefficientPracticeFormula' | 'standardHoursFormula'>('coefficientFormula');
   const [subjectSearch, setSubjectSearch] = useState('');
   const [importModalOpen, setImportModalOpen] = useState(false);
   const autoSyncedMissingSubjects = useRef(false);
@@ -491,10 +513,10 @@ export default function RulesPage() {
 
   const visibleRows = useMemo(() => {
     return rows.filter((rule) => {
-      const matchKeyword = !keyword.trim() || searchMatches(`${rule.code} ${rule.name} ${rule.coefficientTheoryFormula} ${rule.coefficientPracticeFormula} ${rule.standardHoursFormula} ${rule.note}`, keyword);
+      const matchKeyword = !keyword.trim() || searchMatches(`${rule.code} ${rule.name} ${rule.coefficientFormula} ${rule.coefficientTheoryFormula} ${rule.coefficientPracticeFormula} ${rule.standardHoursFormula} ${rule.note}`, keyword);
       const matchFormula = !formulaFilter
-        || (formulaFilter === 'hasCoefficient' && (Boolean(rule.coefficientTheoryFormula) || Boolean(rule.coefficientPracticeFormula)))
-        || (formulaFilter === 'missingCoefficient' && !rule.coefficientTheoryFormula && !rule.coefficientPracticeFormula)
+        || (formulaFilter === 'hasCoefficient' && (Boolean(rule.coefficientFormula) || Boolean(rule.coefficientTheoryFormula) || Boolean(rule.coefficientPracticeFormula)))
+        || (formulaFilter === 'missingCoefficient' && !rule.coefficientFormula && !rule.coefficientTheoryFormula && !rule.coefficientPracticeFormula)
         || (formulaFilter === 'hasStandardHours' && Boolean(rule.standardHoursFormula))
         || (formulaFilter === 'missingStandardHours' && !rule.standardHoursFormula);
       const matchUsage = !usageFilter
@@ -512,6 +534,7 @@ export default function RulesPage() {
     form.setFieldsValue({
       ...rule,
       subjectChoice: rule.name,
+      coefficientFormula: columns.coefficientFormula,
       coefficientTheoryFormula: columns.coefficientTheoryFormula,
       coefficientPracticeFormula: columns.coefficientPracticeFormula,
       standardHoursFormula: columns.standardHoursFormula,
@@ -532,14 +555,16 @@ export default function RulesPage() {
     form.resetFields();
     form.setFieldsValue({
       subjectChoice: undefined,
+      coefficientFormula: `${FORMULA_VARIABLES.commonK} = min(max(1.0 + (${FORMULA_VARIABLES.students} - 40) × 0.01, 0.9), 1.5)`,
       coefficientTheoryFormula: '',
       coefficientPracticeFormula: '',
-      standardHoursFormula: 'Giờ chuẩn = TC × 15',
+      standardHoursFormula: `${FORMULA_VARIABLES.standardHours} = ${FORMULA_VARIABLES.credits} × 15 × ${FORMULA_VARIABLES.commonK}`,
       note: 'Quy tắc tự tạo, áp dụng cho môn/học phần đã chọn.'
     });
   };
 
   const normalizeCurrentFormula = () => {
+    form.setFieldValue('coefficientFormula', normalizeMathFormula(form.getFieldValue('coefficientFormula')));
     form.setFieldValue('coefficientTheoryFormula', normalizeMathFormula(form.getFieldValue('coefficientTheoryFormula')));
     form.setFieldValue('coefficientPracticeFormula', normalizeMathFormula(form.getFieldValue('coefficientPracticeFormula')));
     form.setFieldValue('standardHoursFormula', normalizeMathFormula(form.getFieldValue('standardHoursFormula')));
@@ -561,9 +586,10 @@ export default function RulesPage() {
     const values = await form.validateFields();
     const nextName = values.subjectChoice?.trim();
     const nextCode = editingRule?.code || codeFromSubjectName(nextName || values.name || 'KHAC');
+    const coefficientFormula = normalizeMathFormula(values.coefficientFormula);
     const coefficientTheoryFormula = normalizeMathFormula(values.coefficientTheoryFormula);
     const coefficientPracticeFormula = normalizeMathFormula(values.coefficientPracticeFormula);
-    const formula = normalizeMathFormula(values.standardHoursFormula);
+    const formula = [coefficientFormula, normalizeMathFormula(values.standardHoursFormula)].filter(Boolean).join('; ');
     const normalizedValues = {
       ...values,
       code: nextCode,
@@ -651,6 +677,13 @@ export default function RulesPage() {
     <div className="page-stack rules-page">
       <PageHeader title="Quy tắc tính" />
 
+      <Card className="formula-note-card">
+        <Typography.Text strong>Bảng ký hiệu công thức</Typography.Text>
+        <Typography.Paragraph className="formula-note-text">
+          {FORMULA_VARIABLE_NOTE}
+        </Typography.Paragraph>
+      </Card>
+
       <Card title="Danh sách quy tắc">
         <Space className="rules-filter-toolbar">
           <Input
@@ -670,8 +703,8 @@ export default function RulesPage() {
             options={[
               { label: 'Có hệ số K', value: 'hasCoefficient' },
               { label: 'Chưa có hệ số K', value: 'missingCoefficient' },
-              { label: 'Có giờ chuẩn', value: 'hasStandardHours' },
-              { label: 'Chưa có giờ chuẩn', value: 'missingStandardHours' }
+              { label: 'Có GC', value: 'hasStandardHours' },
+              { label: 'Chưa có GC', value: 'missingStandardHours' }
             ]}
           />
           <Select
@@ -713,7 +746,7 @@ export default function RulesPage() {
           className="rules-table"
           rowKey="code"
           tableLayout="fixed"
-          scroll={{ x: 2040 }}
+          scroll={{ x: 2400 }}
           dataSource={visibleRows}
           loading={summaries.isLoading || subjectRules.isLoading || saveSubjectRules.isPending}
           pagination={smallPagination}
@@ -733,6 +766,13 @@ export default function RulesPage() {
               )
             },
             {
+              title: 'K',
+              dataIndex: 'coefficientFormula',
+              width: 360,
+              className: 'text-left',
+              render: (value: string) => value ? <FormulaView value={value} /> : <span className="empty-note-inline">Không cấu hình</span>
+            },
+            {
               title: 'K_lt',
               dataIndex: 'coefficientTheoryFormula',
               width: 360,
@@ -747,13 +787,13 @@ export default function RulesPage() {
               render: (value: string) => value ? <FormulaView value={value} /> : <span className="empty-note-inline">Không cấu hình</span>
             },
             {
-              title: 'Giờ chuẩn',
+              title: 'GC',
               dataIndex: 'standardHoursFormula',
               width: 430,
               className: 'text-left',
               render: (value: string) => value ? <FormulaView value={value} /> : <span className="empty-note-inline">Chưa có công thức</span>
             },
-            { title: 'Ghi chú', dataIndex: 'note', width: 260, className: 'text-left' },
+            { title: 'Ghi chú', dataIndex: 'note', width: 360, className: 'text-left' },
             { title: 'Số lớp đã tính', dataIndex: 'classCount', width: 140 },
             { title: 'GC đã tính', dataIndex: 'totalStandardHours', width: 140, render: formatNumber },
             {
@@ -833,6 +873,15 @@ export default function RulesPage() {
             />
           </Form.Item>
           <Form.Item
+            name="coefficientFormula"
+            label="K"
+            rules={[
+              { validator: (_, value) => (value ? validateFormulaSyntax(value) : Promise.resolve()) }
+            ]}
+          >
+            <Input.TextArea rows={2} onFocus={() => setActiveFormulaField('coefficientFormula')} onBlur={normalizeCurrentFormula} />
+          </Form.Item>
+          <Form.Item
             name="coefficientTheoryFormula"
             label="K_lt"
             rules={[
@@ -852,9 +901,9 @@ export default function RulesPage() {
           </Form.Item>
           <Form.Item
             name="standardHoursFormula"
-            label="Công thức giờ chuẩn"
+            label="Công thức GC"
             rules={[
-              { required: true, message: 'Nhập công thức giờ chuẩn' },
+              { required: true, message: 'Nhập công thức GC' },
               { validator: (_, value) => validateFormulaSyntax(value) }
             ]}
           >
@@ -880,9 +929,13 @@ export default function RulesPage() {
                 ))}
               </div>
               <div className="math-variable-help">
-                <span><strong>SV</strong>: số sinh viên.</span>
-                <span><strong>SV_nhom</strong>: số sinh viên trong nhóm thí nghiệm.</span>
-                <span><strong>TC</strong>: tín chỉ.</span>
+                <span><strong>{FORMULA_VARIABLES.students}</strong>: số sinh viên.</span>
+                <span><strong>{FORMULA_VARIABLES.groupStudents}</strong>: số sinh viên trong nhóm thí nghiệm.</span>
+                <span><strong>{FORMULA_VARIABLES.credits}</strong>: tín chỉ.</span>
+                <span><strong>{FORMULA_VARIABLES.standardHours}</strong>: giờ chuẩn.</span>
+                <span><strong>{FORMULA_VARIABLES.commonK}</strong>: hệ số chung.</span>
+                <span><strong>{FORMULA_VARIABLES.weeks}/{FORMULA_VARIABLES.days}</strong>: số tuần/số ngày.</span>
+                <span><strong>{FORMULA_VARIABLES.advisorShare}</strong>: hệ số hướng dẫn.</span>
                 <span><strong>K_lt/K_th</strong>: hệ số từng phần.</span>
               </div>
             </div>

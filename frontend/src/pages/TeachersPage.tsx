@@ -19,14 +19,12 @@ const numberSorter = <T,>(selector: (record: T) => number | null | undefined) =>
   (left: T, right: T) => Number(selector(left) ?? 0) - Number(selector(right) ?? 0);
 const hasSplitCoefficient = (record: TeacherWorkloadDetail) =>
   Number(record.coefficientTheory ?? 0) > 0 || Number(record.coefficientPractice ?? 0) > 0;
+const renderGeneralCoefficient = (value: number | null | undefined, record: TeacherWorkloadDetail) =>
+  hasSplitCoefficient(record) || value == null ? '' : formatNumber(value);
 const renderTheoryCoefficient = (value: number | null | undefined, record: TeacherWorkloadDetail) =>
-  hasSplitCoefficient(record)
-    ? formatNumber(value)
-    : { children: formatNumber(record.coefficientK), props: { colSpan: 2 } };
+  hasSplitCoefficient(record) ? formatNumber(value) : '';
 const renderPracticeCoefficient = (value: number | null | undefined, record: TeacherWorkloadDetail) =>
-  hasSplitCoefficient(record)
-    ? formatNumber(value)
-    : { children: null, props: { colSpan: 0 } };
+  hasSplitCoefficient(record) ? formatNumber(value) : '';
 
 const getTeachingStatus = (academicYear?: string, semester?: string) => {
   const match = academicYear?.match(/(\d{4})\s*-\s*(\d{4})/);
@@ -174,11 +172,12 @@ export default function TeachersPage({ user }: TeachersPageProps) {
                 {
                   title: '',
                   children: [
-                    { title: 'K_LT', dataIndex: 'coefficientTheory', width: 100, render: renderTheoryCoefficient, sorter: numberSorter((record) => hasSplitCoefficient(record) ? record.coefficientTheory : record.coefficientK) },
+                    { title: 'K', dataIndex: 'coefficientK', width: 90, render: renderGeneralCoefficient, sorter: numberSorter((record) => record.coefficientK) },
+                    { title: 'K_LT', dataIndex: 'coefficientTheory', width: 100, render: renderTheoryCoefficient, sorter: numberSorter((record) => record.coefficientTheory) },
                     { title: 'K_TH', dataIndex: 'coefficientPractice', width: 100, render: renderPracticeCoefficient, sorter: numberSorter((record) => record.coefficientPractice) }
                   ]
                 },
-                { title: 'Tiết quy đổi', dataIndex: 'standardHours', width: 130, render: formatNumber },
+                { title: 'GC', dataIndex: 'standardHours', width: 130, render: formatNumber },
                 { title: 'Quy tắc', dataIndex: 'ruleName', width: 220, className: 'text-left' }
               ]}
             />

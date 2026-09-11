@@ -1,4 +1,4 @@
-﻿import { Alert, Button, Card, Col, Empty, Row, Select, Skeleton, Space, Statistic, Table, Tabs } from 'antd';
+import { Alert, Button, Card, Col, Empty, Row, Select, Skeleton, Space, Statistic, Table, Tabs } from 'antd';
 import ReactECharts from 'echarts-for-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { TermFilter } from '../components/AppShell';
@@ -16,7 +16,7 @@ type DashboardPageProps = {
 
 type TeacherSummaryRow = {
   teacherName: string;
-  departmentPh: string;
+  subjectName: string;
   classCount: number;
   totalCredits: number;
   totalStudents: number;
@@ -53,14 +53,12 @@ const numberSorter = <T,>(selector: (record: T) => number | null | undefined) =>
   (left: T, right: T) => Number(selector(left) ?? 0) - Number(selector(right) ?? 0);
 const hasSplitCoefficient = (record: TeacherWorkloadDetail) =>
   Number(record.coefficientTheory ?? 0) > 0 || Number(record.coefficientPractice ?? 0) > 0;
+const renderGeneralCoefficient = (value: number | null | undefined, record: TeacherWorkloadDetail) =>
+  hasSplitCoefficient(record) || value == null ? '' : formatNumber(value);
 const renderTheoryCoefficient = (value: number | null | undefined, record: TeacherWorkloadDetail) =>
-  hasSplitCoefficient(record)
-    ? formatNumber(value)
-    : { children: formatNumber(record.coefficientK), props: { colSpan: 2 } };
+  hasSplitCoefficient(record) ? formatNumber(value) : '';
 const renderPracticeCoefficient = (value: number | null | undefined, record: TeacherWorkloadDetail) =>
-  hasSplitCoefficient(record)
-    ? formatNumber(value)
-    : { children: null, props: { colSpan: 0 } };
+  hasSplitCoefficient(record) ? formatNumber(value) : '';
 const workloadGroupOf = (record: TeacherWorkloadDetail) => {
   const text = normalizeSearchText(`${record.ruleName} ${record.subjectName} ${record.className}`);
   if (text.includes('hoi dong')) {
@@ -92,7 +90,6 @@ const getTeachingStatus = (academicYear?: string, semester?: string) => {
 
 export default function DashboardPage({ termFilter, canDownloadReport, onOpenImports }: DashboardPageProps) {
   const [selectedTeacher, setSelectedTeacher] = useState<string>();
-  const [selectedDepartment, setSelectedDepartment] = useState<string>();
   const [selectedSubject, setSelectedSubject] = useState<string>();
   const [selectedRule, setSelectedRule] = useState<string>();
   const details = useTeacherWorkloadDetailsQuery();
@@ -100,7 +97,6 @@ export default function DashboardPage({ termFilter, canDownloadReport, onOpenImp
 
   useEffect(() => {
     setSelectedTeacher(undefined);
-    setSelectedDepartment(undefined);
     setSelectedSubject(undefined);
     setSelectedRule(undefined);
   }, [termFilter.academicYear, termFilter.semester]);
@@ -113,56 +109,47 @@ export default function DashboardPage({ termFilter, canDownloadReport, onOpenImp
     });
   }, [details.data, termFilter.academicYear, termFilter.semester]);
 
-  const departmentOptions = useMemo(() => Array.from(new Set(periodDetails.map((item) => item.departmentPh).filter(Boolean)))
-    .sort((left, right) => left.localeCompare(right, 'vi'))
-    .map((department) => ({ label: department, value: department })), [periodDetails]);
-
   const subjectOptions = useMemo(() => {
-    const sourceRows = selectedDepartment
-      ? periodDetails.filter((item) => item.departmentPh === selectedDepartment)
-      : periodDetails;
-    return Array.from(new Set(sourceRows.map((item) => item.subjectName).filter(Boolean)))
+    return Array.from(new Set(periodDetails.map((item) => item.subjectName).filter(Boolean)))
       .sort((left, right) => left.localeCompare(right, 'vi'))
       .map((subject) => ({ label: subject, value: subject }));
-  }, [periodDetails, selectedDepartment]);
-
-  const ruleOptions = useMemo(() => Array.from(new Set(periodDetails.map((item) => item.ruleName || 'Chưa xác định')))
-    .sort((left, right) => left.localeCompare(right, 'vi'))
-    .map((ruleName) => ({ label: ruleName, value: ruleName })), [periodDetails]);
+  }, [periodDetails]);
 
   const allRuleNames = useMemo(() => {
     const ruleNames = new Set<string>();
     DEFAULT_WORKLOAD_RULES.forEach((rule) => ruleNames.add(rule.name));
     readWorkloadRules().forEach((rule) => ruleNames.add(rule.name));
     (subjectRules.data ?? []).forEach((rule) => ruleNames.add(rule.name));
-    const periodRuleTotals = new Map<string, number>();
     periodDetails.forEach((item) => {
-      const ruleName = item.ruleName || 'Chưa xác định';
-      ruleNames.add(ruleName);
-      periodRuleTotals.set(ruleName, (periodRuleTotals.get(ruleName) ?? 0) + (item.standardHours ?? 0));
+      if (item.ruleName) {
+        ruleNames.add(item.ruleName);
+      }
     });
-    return Array.from(ruleNames)
-      .sort((left, right) => (periodRuleTotals.get(right) ?? 0) - (periodRuleTotals.get(left) ?? 0) || left.localeCompare(right, 'vi'));
+    return Array.from(ruleNames).sort((left, right) => left.localeCompare(right, 'vi'));
   }, [periodDetails, subjectRules.data]);
+
+  const ruleOptions = useMemo(() => allRuleNames.map((ruleName) => ({
+    label: ruleName,
+    value: ruleName
+  })), [allRuleNames]);
 
   const filteredDetails = useMemo(() => {
     return periodDetails.filter((item) => {
       const ruleName = item.ruleName || 'Chưa xác định';
       const matchTeacher = !selectedTeacher || selectedTeacher === item.teacherName;
-      const matchDepartment = !selectedDepartment || selectedDepartment === item.departmentPh;
       const matchSubject = !selectedSubject || selectedSubject === item.subjectName;
       const matchRule = !selectedRule || selectedRule === ruleName;
-      return matchTeacher && matchDepartment && matchSubject && matchRule;
+      return matchTeacher && matchSubject && matchRule;
     });
-  }, [periodDetails, selectedDepartment, selectedRule, selectedSubject, selectedTeacher]);
+  }, [periodDetails, selectedRule, selectedSubject, selectedTeacher]);
 
   const teacherRows = useMemo<TeacherSummaryRow[]>(() => {
     const grouped = new Map<string, TeacherSummaryRow>();
     filteredDetails.forEach((item) => {
-      const key = `${item.teacherName}__${item.departmentPh}`;
+      const key = `${item.teacherName}__${item.subjectName}`;
       const current = grouped.get(key) ?? {
         teacherName: item.teacherName,
-        departmentPh: item.departmentPh,
+        subjectName: item.subjectName,
         classCount: 0,
         totalCredits: 0,
         totalStudents: 0,
@@ -293,26 +280,13 @@ export default function DashboardPage({ termFilter, canDownloadReport, onOpenImp
           <Select
             allowClear
             showSearch
-            placeholder="Bộ môn"
-            options={departmentOptions}
-            value={selectedDepartment}
-            onChange={(department) => {
-              setSelectedDepartment(department);
-              setSelectedSubject(undefined);
-            }}
-            filterOption={antSelectFilterOption}
-            className="filter-select"
-          />
-          <Select
-            allowClear
-            showSearch
-            placeholder="Môn học"
+            placeholder="Học phần"
             options={subjectOptions}
             value={selectedSubject}
             onChange={setSelectedSubject}
             filterOption={antSelectFilterOption}
             className="filter-select subject-filter-select"
-            disabled={subjectOptions.length === 0}
+            popupMatchSelectWidth={420}
           />
           <Select
             allowClear
@@ -326,7 +300,6 @@ export default function DashboardPage({ termFilter, canDownloadReport, onOpenImp
           />
           <Button onClick={() => {
             setSelectedTeacher(undefined);
-            setSelectedDepartment(undefined);
             setSelectedSubject(undefined);
             setSelectedRule(undefined);
           }}>
@@ -404,7 +377,7 @@ export default function DashboardPage({ termFilter, canDownloadReport, onOpenImp
         <Col xs={12} md={6} xl={3}><Card className="stat-card stat-card-emerald"><Statistic title="Sinh viên" value={overviewData.totalStudents} loading={details.isLoading} /></Card></Col>
         <Col xs={12} md={6} xl={3}><Card className="stat-card stat-card-rose"><Statistic title="Thỉnh giảng" value={overviewData.guestClassCount} loading={details.isLoading} /></Card></Col>
         <Col xs={12} md={6} xl={3}><Card className="stat-card stat-card-indigo"><Statistic title="K TB" value={overviewData.averageK} precision={2} loading={details.isLoading} /></Card></Col>
-        <Col xs={12} md={6} xl={3}><Card className="stat-card stat-card-slate"><Statistic title="Giờ chuẩn" value={overviewData.totalStandardHours} precision={1} loading={details.isLoading} /></Card></Col>
+        <Col xs={12} md={6} xl={3}><Card className="stat-card stat-card-slate"><Statistic title="GC" value={overviewData.totalStandardHours} precision={1} loading={details.isLoading} /></Card></Col>
       </Row>
 
       {!details.isLoading && !hasData && (
@@ -431,7 +404,7 @@ export default function DashboardPage({ termFilter, canDownloadReport, onOpenImp
                   children: (
                     <Table
                       className="workload-table"
-                      rowKey={(record) => `${record.teacherName}-${record.departmentPh}`}
+                      rowKey={(record) => `${record.teacherName}-${record.subjectName}`}
                       tableLayout="fixed"
                       scroll={{ x: 1120 }}
                       dataSource={filteredTeacherRows}
@@ -441,7 +414,7 @@ export default function DashboardPage({ termFilter, canDownloadReport, onOpenImp
                       columns={[
                         sttColumn,
                         { title: 'GV', dataIndex: 'teacherName', width: 210, className: 'text-left' },
-                        { title: 'Bộ môn', dataIndex: 'departmentPh', width: 160, className: 'text-left' },
+                        { title: 'Học phần', dataIndex: 'subjectName', width: 260, className: 'text-left workload-subject-cell' },
                         { title: 'Số lớp', dataIndex: 'classCount', width: 100, sorter: numberSorter((record) => record.classCount) },
                         { title: 'Tổng TC', dataIndex: 'totalCredits', width: 110, render: formatNumber, sorter: numberSorter((record) => record.totalCredits) },
                         { title: 'Tổng SV', dataIndex: 'totalStudents', width: 110, render: formatNumber, sorter: numberSorter((record) => record.totalStudents) },
@@ -481,11 +454,12 @@ export default function DashboardPage({ termFilter, canDownloadReport, onOpenImp
                         {
                           title: '',
                           children: [
-                            { title: 'K_LT', dataIndex: 'coefficientTheory', width: 100, render: renderTheoryCoefficient, sorter: numberSorter((record) => hasSplitCoefficient(record) ? record.coefficientTheory : record.coefficientK) },
+                            { title: 'K', dataIndex: 'coefficientK', width: 90, render: renderGeneralCoefficient, sorter: numberSorter((record) => record.coefficientK) },
+                            { title: 'K_LT', dataIndex: 'coefficientTheory', width: 100, render: renderTheoryCoefficient, sorter: numberSorter((record) => record.coefficientTheory) },
                             { title: 'K_TH', dataIndex: 'coefficientPractice', width: 100, render: renderPracticeCoefficient, sorter: numberSorter((record) => record.coefficientPractice) }
                           ]
                         },
-                        { title: 'Tiết quy đổi', dataIndex: 'standardHours', width: 130, render: formatNumber, sorter: numberSorter((record) => record.standardHours) },
+                        { title: 'GC', dataIndex: 'standardHours', width: 130, render: formatNumber, sorter: numberSorter((record) => record.standardHours) },
                         { title: 'Quy tắc', dataIndex: 'ruleName', width: 220, className: 'text-left' }
                       ]}
                     />
@@ -553,7 +527,7 @@ export default function DashboardPage({ termFilter, canDownloadReport, onOpenImp
                       },
                       series: [
                         {
-                          name: 'Giờ chuẩn',
+                          name: 'GC',
                           type: 'bar',
                           barWidth: 13,
                           data: chartRows.map((item) => item.totalStandardHours),
@@ -600,7 +574,7 @@ export default function DashboardPage({ termFilter, canDownloadReport, onOpenImp
                     { title: 'Bộ môn', dataIndex: 'departmentPh', className: 'text-left' },
                     { title: 'GV', dataIndex: 'teacherCount' },
                     { title: 'Lớp', dataIndex: 'classCount' },
-                    { title: 'Giờ chuẩn', dataIndex: 'totalStandardHours', render: formatNumber }
+                    { title: 'GC', dataIndex: 'totalStandardHours', render: formatNumber }
                   ]}
                 />
               </Card>
@@ -619,7 +593,7 @@ export default function DashboardPage({ termFilter, canDownloadReport, onOpenImp
                 sttColumn,
                 { title: 'Tên quy tắc', dataIndex: 'ruleName', className: 'text-left' },
                 { title: 'Số lớp', dataIndex: 'classCount' },
-                { title: 'Giờ chuẩn', dataIndex: 'totalStandardHours', render: formatNumber }
+                { title: 'GC', dataIndex: 'totalStandardHours', render: formatNumber }
               ]}
             />
           </Card>

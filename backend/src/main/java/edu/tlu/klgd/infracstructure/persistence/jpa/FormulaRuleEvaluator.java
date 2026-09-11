@@ -10,6 +10,26 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 final class FormulaRuleEvaluator {
+    private static final String VAR_STANDARD_HOURS = "GIOCHUAN";
+    private static final String VAR_STANDARD_HOURS_SHORT = "GC";
+    private static final String VAR_STANDARD_HOURS_EN = "STANDARDHOURS";
+    private static final String VAR_STUDENTS = "SV";
+    private static final String VAR_CREDITS = "TC";
+    private static final String VAR_CREDITS_ALIAS = "TINCHI";
+    private static final String VAR_ADVISOR_SHARE = "HSHD";
+    private static final String VAR_WEEKS = "T";
+    private static final String VAR_DAYS = "N";
+    private static final String VAR_K = "K";
+    private static final String VAR_K_THEORY = "KLT";
+    private static final String VAR_K_PRACTICE = "KTN";
+    private static final String VAR_GROUP_STUDENTS = "SVNHOM";
+    private static final String VAR_GROUP_STUDENTS_ALIAS = "SV_NHOM";
+    private static final String VAR_GRADUATION_INTERNSHIP_WEEKS = "SOTUANTHUCTAPTOTNGHIEP";
+    private static final String VAR_SURVEYING_INTERNSHIP_DAYS = "SONGAYTHUCTAPTRACDIA";
+    private static final String VAR_DEFAULT_INTERNSHIP_DAYS = "SONGAYTHUCTAPMACDINH";
+    private static final String VAR_LAB_GROUP_SIZE = "LABGROUPSIZE";
+    private static final String VAR_PI = "PI";
+
     private static final Pattern CONDITIONAL_PATTERN = Pattern.compile(
         "^\\s*(?:n\\u1ebfu|neu)\\s+(.+?)\\s+(?:th\\u00ec|thi)\\s+(.+?)(?:\\s*,\\s*(?:ng\\u01b0\\u1ee3c\\s+l\\u1ea1i|nguoc\\s+lai)\\s+(.+))?$",
         Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
@@ -20,10 +40,9 @@ final class FormulaRuleEvaluator {
     }
 
     static Evaluation evaluate(ClassRecord record, String ruleCode, String ruleName, String formula, CalculationSettingsDTO settings) {
-        Map<String, Double> variables = baseVariables(record, settings);
+        Map<String, Double> variables = baseVariables(record, ruleCode, ruleName, settings);
         String ktnExpression = null;
         Double groupedKtnSum = null;
-        Double groupedKtnAverage = null;
         Double standardHours = null;
 
         for (String rawLine : formula.split(";")) {
@@ -35,8 +54,7 @@ final class FormulaRuleEvaluator {
             if (normalizedLine.contains("tung nhom") && ktnExpression != null) {
                 GroupedCoefficient groupedCoefficient = groupedCoefficient(record, settings, line, ktnExpression, variables);
                 groupedKtnSum = groupedCoefficient.sum();
-                groupedKtnAverage = groupedCoefficient.average();
-                variables.put("KTN", groupedKtnSum);
+                variables.put(VAR_K_PRACTICE, groupedKtnSum);
             }
             Assignment assignment = assignmentFromLine(line, variables);
             if (assignment == null) {
@@ -46,27 +64,27 @@ final class FormulaRuleEvaluator {
             String expression = prepareExpression(assignment.expression());
             double value = new ExpressionParser(expression, variables).parse();
             variables.put(target, value);
-            if ("KTN".equals(target)) {
+            if (VAR_K_PRACTICE.equals(target)) {
                 ktnExpression = expression;
-                if (expression.toUpperCase(Locale.ROOT).contains("SVNHOM") || expression.toUpperCase(Locale.ROOT).contains("SV_NHOM")) {
+                String upperExpression = expression.toUpperCase(Locale.ROOT);
+                if (upperExpression.contains(VAR_GROUP_STUDENTS) || upperExpression.contains(VAR_GROUP_STUDENTS_ALIAS)) {
                     GroupedCoefficient groupedCoefficient = groupedCoefficient(record, settings, line, ktnExpression, variables);
                     groupedKtnSum = groupedCoefficient.sum();
-                    groupedKtnAverage = groupedCoefficient.average();
-                    variables.put("KTN", groupedKtnSum);
+                    variables.put(VAR_K_PRACTICE, groupedKtnSum);
                 }
             }
-            if ("GIOCHUAN".equals(target) || "STANDARDHOURS".equals(target)) {
+            if (VAR_STANDARD_HOURS.equals(target) || VAR_STANDARD_HOURS_EN.equals(target)) {
                 standardHours = value;
             }
         }
 
         if (standardHours == null) {
-            standardHours = variables.getOrDefault("K", 1.0) * variables.getOrDefault("TC", 0.0) * 15.0;
+            standardHours = variables.getOrDefault(VAR_K, 1.0) * variables.getOrDefault(VAR_CREDITS, 0.0) * 15.0;
         }
 
-        Double k = variables.get("K");
-        Double klt = variables.get("KLT");
-        Double ktn = groupedKtnAverage == null ? variables.get("KTN") : groupedKtnAverage;
+        Double k = variables.get(VAR_K);
+        Double klt = variables.get(VAR_K_THEORY);
+        Double ktn = variables.get(VAR_K_PRACTICE);
         return new Evaluation(ruleCode, ruleName, k, klt, ktn, standardHours);
     }
 
@@ -125,44 +143,54 @@ final class FormulaRuleEvaluator {
         }
         double remainingStudents = Math.max(0, value(record.getStudentCount()));
         double total = 0;
-        double groups = 0;
         while (remainingStudents > 0) {
             double currentGroupStudents = Math.min(groupSize, remainingStudents);
             Map<String, Double> groupVariables = new HashMap<>(variables);
-            groupVariables.put("SVNHOM", currentGroupStudents);
-            groupVariables.put("SV_NHOM", currentGroupStudents);
+            groupVariables.put(VAR_GROUP_STUDENTS, currentGroupStudents);
+            groupVariables.put(VAR_GROUP_STUDENTS_ALIAS, currentGroupStudents);
             total += new ExpressionParser(ktnExpression, groupVariables).parse();
-            groups += 1;
             remainingStudents -= currentGroupStudents;
         }
-        return new GroupedCoefficient(total, groups == 0 ? null : total / groups);
+        return new GroupedCoefficient(total);
     }
 
-    private record GroupedCoefficient(double sum, Double average) {
+    private record GroupedCoefficient(double sum) {
     }
 
-    private static Map<String, Double> baseVariables(ClassRecord record, CalculationSettingsDTO settings) {
+    private static Map<String, Double> baseVariables(ClassRecord record, String ruleCode, String ruleName, CalculationSettingsDTO settings) {
         Map<String, Double> variables = new HashMap<>();
         double students = value(record.getStudentCount());
         double credits = value(record.getCredits());
-        variables.put("SV", students);
-        variables.put("TC", credits);
-        variables.put("TINCHI", credits);
-        variables.put("SOTUANTHUCTAPTOTNGHIEP", settings.graduationInternshipWeeks());
-        variables.put("SONGAYTHUCTAPTRACDIA", settings.surveyingInternshipDays());
-        variables.put("SONGAYTHUCTAPMACDINH", settings.defaultInternshipDays());
-        variables.put("LABGROUPSIZE", settings.labGroupSize());
-        variables.put("PI", Math.PI);
+        variables.put(VAR_STUDENTS, students);
+        variables.put(VAR_CREDITS, credits);
+        variables.put(VAR_CREDITS_ALIAS, credits);
+        variables.put(VAR_ADVISOR_SHARE, credits <= 0 ? 1.0 : credits);
+        variables.put(VAR_GRADUATION_INTERNSHIP_WEEKS, settings.graduationInternshipWeeks());
+        variables.put(VAR_SURVEYING_INTERNSHIP_DAYS, settings.surveyingInternshipDays());
+        variables.put(VAR_DEFAULT_INTERNSHIP_DAYS, settings.defaultInternshipDays());
+        variables.put(VAR_WEEKS, settings.graduationInternshipWeeks());
+        variables.put(VAR_DAYS, defaultDayVariable(ruleCode, ruleName, settings));
+        variables.put(VAR_LAB_GROUP_SIZE, settings.labGroupSize());
+        variables.put(VAR_PI, Math.PI);
         return variables;
+    }
+
+    private static double defaultDayVariable(String ruleCode, String ruleName, CalculationSettingsDTO settings) {
+        String text = TextNormalizer.normalize((ruleCode == null ? "" : ruleCode) + " " + (ruleName == null ? "" : ruleName));
+        if (text.contains("trac dia")) {
+            return settings.surveyingInternshipDays();
+        }
+        return settings.defaultInternshipDays();
     }
 
     private static String prepareExpression(String expression) {
         return expression
-            .replaceAll("(?iu)t\\u00edn\\s+ch\\u1ec9|tin\\s+chi", "TC")
-            .replaceAll("(?iu)s\\u1ed1\\s+tu\\u1ea7n\\s+th\\u1ef1c\\s+t\\u1eadp\\s+t\\u1ed1t\\s+nghi\\u1ec7p|so\\s+tuan\\s+thuc\\s+tap\\s+tot\\s+nghiep", "SOTUANTHUCTAPTOTNGHIEP")
-            .replaceAll("(?iu)s\\u1ed1\\s+ng\\u00e0y\\s+th\\u1ef1c\\s+t\\u1eadp\\s+tr\\u1eafc\\s+\\u0111\\u1ecba|so\\s+ngay\\s+thuc\\s+tap\\s+trac\\s+dia", "SONGAYTHUCTAPTRACDIA")
-            .replaceAll("(?iu)s\\u1ed1\\s+ng\\u00e0y\\s+th\\u1ef1c\\s+t\\u1eadp\\s+m\\u1eb7c\\s+\\u0111\\u1ecbnh|so\\s+ngay\\s+thuc\\s+tap\\s+mac\\s+dinh", "SONGAYTHUCTAPMACDINH")
-            .replaceAll("(?iu)SV\\s+nh\\u00f3m|SV\\s+nhom", "SVNHOM")
+            .replaceAll("(?iu)t\\u00edn\\s+ch\\u1ec9|tin\\s+chi", VAR_CREDITS)
+            .replaceAll("(?iu)s\\u1ed1\\s+tu\\u1ea7n\\s+th\\u1ef1c\\s+t\\u1eadp\\s+t\\u1ed1t\\s+nghi\\u1ec7p|so\\s+tuan\\s+thuc\\s+tap\\s+tot\\s+nghiep", VAR_WEEKS)
+            .replaceAll("(?iu)s\\u1ed1\\s+ng\\u00e0y\\s+th\\u1ef1c\\s+t\\u1eadp\\s+tr\\u1eafc\\s+\\u0111\\u1ecba|so\\s+ngay\\s+thuc\\s+tap\\s+trac\\s+dia", VAR_DAYS)
+            .replaceAll("(?iu)s\\u1ed1\\s+ng\\u00e0y\\s+th\\u1ef1c\\s+t\\u1eadp\\s+m\\u1eb7c\\s+\\u0111\\u1ecbnh|so\\s+ngay\\s+thuc\\s+tap\\s+mac\\s+dinh", VAR_DAYS)
+            .replaceAll("(?iu)SV\\s+nh\\u00f3m|SV\\s+nhom", VAR_GROUP_STUDENTS)
+            .replaceAll("(?iu)h\\u1ec7\\s+s\\u1ed1\\s+h\\u01b0\\u1edbng\\s+d\\u1eabn|he\\s+so\\s+huong\\s+dan", VAR_ADVISOR_SHARE)
             .replace("\u00b2", "^2")
             .replace("\u221a(", "sqrt(")
             .replace('\u00d7', '*')
@@ -170,21 +198,21 @@ final class FormulaRuleEvaluator {
             .replace("\u2264", "<=")
             .replace("\u2265", ">=")
             .replace('\u221a', ' ')
-            .replace("\u03c0", "PI")
+            .replace("\u03c0", VAR_PI)
             .replaceAll("(?<=\\d),(?=\\d)", ".")
             .trim();
     }
 
     private static String variableName(String target) {
         String normalized = TextNormalizer.normalize(target).replace(" ", "").toUpperCase(Locale.ROOT);
-        if (normalized.equals("GIOCHUAN")) {
-            return "GIOCHUAN";
+        if (normalized.equals(VAR_STANDARD_HOURS) || normalized.equals(VAR_STANDARD_HOURS_SHORT)) {
+            return VAR_STANDARD_HOURS;
         }
         if (normalized.equals("KLYTHUYET") || normalized.equals("K_LT")) {
-            return "KLT";
+            return VAR_K_THEORY;
         }
         if (normalized.equals("KTHUCHANH") || normalized.equals("KTHINGHIEM") || normalized.equals("KTH") || normalized.equals("K_TH")) {
-            return "KTN";
+            return VAR_K_PRACTICE;
         }
         return normalized;
     }

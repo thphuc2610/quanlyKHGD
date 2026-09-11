@@ -1,10 +1,11 @@
-﻿import { DeleteOutlined, EyeOutlined, InboxOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
+import { DeleteOutlined, DownloadOutlined, EyeOutlined, InboxOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
 import { Alert, Button, Card, Drawer, Form, Input, message, Popconfirm, Select, Space, Table, Tabs, Tag, Upload } from 'antd';
 import ReactECharts from 'echarts-for-react';
 import { useEffect, useMemo, useState } from 'react';
+import * as XLSX from 'xlsx';
 import type { TermFilter } from '../components/AppShell';
 import { smallPagination, sttColumn, widePagination } from '../constants/table';
-import { buildCalculationSettings, readSystemSettings } from '../constants/workloadConfig';
+import { buildCalculationSettings, DEFAULT_WORKLOAD_RULES, readSystemSettings, readWorkloadRules } from '../constants/workloadConfig';
 import {
   useCalculateBatchMutation,
   useDeleteImportBatchMutation,
@@ -43,14 +44,12 @@ const numberSorter = <T,>(selector: (record: T) => number | null | undefined) =>
   (left: T, right: T) => Number(selector(left) ?? 0) - Number(selector(right) ?? 0);
 const hasSplitCoefficient = (record: TeacherWorkloadDetail) =>
   Number(record.coefficientTheory ?? 0) > 0 || Number(record.coefficientPractice ?? 0) > 0;
+const renderGeneralCoefficient = (value: number | null | undefined, record: TeacherWorkloadDetail) =>
+  hasSplitCoefficient(record) || value == null ? '' : formatNumber(value);
 const renderTheoryCoefficient = (value: number | null | undefined, record: TeacherWorkloadDetail) =>
-  hasSplitCoefficient(record)
-    ? formatNumber(value)
-    : { children: formatNumber(record.coefficientK), props: { colSpan: 2 } };
+  hasSplitCoefficient(record) ? formatNumber(value) : '';
 const renderPracticeCoefficient = (value: number | null | undefined, record: TeacherWorkloadDetail) =>
-  hasSplitCoefficient(record)
-    ? formatNumber(value)
-    : { children: null, props: { colSpan: 0 } };
+  hasSplitCoefficient(record) ? formatNumber(value) : '';
 
 const getTeachingStatus = (academicYear?: string, semester?: string) => {
   const match = academicYear?.match(/(\d{4})\s*-\s*(\d{4})/);
@@ -65,7 +64,7 @@ const sameText = (left?: string, right?: string) => (left ?? '').trim() === (rig
 
 type TeacherSummaryRow = {
   teacherName: string;
-  departmentPh: string;
+  subjectName: string;
   classCount: number;
   totalCredits: number;
   totalStudents: number;
@@ -93,7 +92,7 @@ export default function ImportPage({ termFilter, onTermFilterChange }: ImportPag
   const [batchStatus, setBatchStatus] = useState<string>();
   const [detailKeyword, setDetailKeyword] = useState('');
   const [selectedTeacher, setSelectedTeacher] = useState<string>();
-  const [selectedDepartment, setSelectedDepartment] = useState<string>();
+  const [selectedSubject, setSelectedSubject] = useState<string>();
   const [selectedRule, setSelectedRule] = useState<string>();
   const [form] = Form.useForm();
   const batches = useImportBatchesQuery();
@@ -136,13 +135,24 @@ export default function ImportPage({ termFilter, onTermFilterChange }: ImportPag
     .sort((left, right) => left.localeCompare(right, 'vi'))
     .map((teacherName) => ({ label: teacherName, value: teacherName })), [periodDetails]);
 
-  const departmentOptions = useMemo(() => Array.from(new Set(periodDetails.map((item) => item.departmentPh)))
+  const subjectOptions = useMemo(() => Array.from(new Set(periodDetails.map((item) => item.subjectName).filter(Boolean)))
     .sort((left, right) => left.localeCompare(right, 'vi'))
-    .map((department) => ({ label: department, value: department })), [periodDetails]);
+    .map((subject) => ({ label: subject, value: subject })), [periodDetails]);
 
-  const ruleOptions = useMemo(() => Array.from(new Set(periodDetails.map((item) => item.ruleName || 'Chưa xác định')))
-    .sort((left, right) => left.localeCompare(right, 'vi'))
-    .map((ruleName) => ({ label: ruleName, value: ruleName })), [periodDetails]);
+  const ruleOptions = useMemo(() => {
+    const ruleNames = new Set<string>();
+    DEFAULT_WORKLOAD_RULES.forEach((rule) => ruleNames.add(rule.name));
+    readWorkloadRules().forEach((rule) => ruleNames.add(rule.name));
+    (subjectRules.data ?? []).forEach((rule) => ruleNames.add(rule.name));
+    periodDetails.forEach((item) => {
+      if (item.ruleName) {
+        ruleNames.add(item.ruleName);
+      }
+    });
+    return Array.from(ruleNames)
+      .sort((left, right) => left.localeCompare(right, 'vi'))
+      .map((ruleName) => ({ label: ruleName, value: ruleName }));
+  }, [periodDetails, subjectRules.data]);
 
   const filteredDetails = useMemo(() => {
     const keyword = detailKeyword.trim().toLowerCase();
@@ -150,19 +160,19 @@ export default function ImportPage({ termFilter, onTermFilterChange }: ImportPag
       const ruleName = item.ruleName || 'Chưa xác định';
       const matchKeyword = !keyword || searchMatches(`${item.teacherName} ${item.className} ${item.subjectName} ${item.departmentPh} ${item.unitName ?? ''}`, keyword);
       const matchTeacher = !selectedTeacher || selectedTeacher === item.teacherName;
-      const matchDepartment = !selectedDepartment || selectedDepartment === item.departmentPh;
+      const matchSubject = !selectedSubject || selectedSubject === item.subjectName;
       const matchRule = !selectedRule || selectedRule === ruleName;
-      return matchKeyword && matchTeacher && matchDepartment && matchRule;
+      return matchKeyword && matchTeacher && matchSubject && matchRule;
     });
-  }, [detailKeyword, periodDetails, selectedDepartment, selectedRule, selectedTeacher]);
+  }, [detailKeyword, periodDetails, selectedRule, selectedSubject, selectedTeacher]);
 
   const teacherSummaryRows = useMemo<TeacherSummaryRow[]>(() => {
     const grouped = new Map<string, TeacherSummaryRow>();
     filteredDetails.forEach((item) => {
-      const key = `${item.teacherName}__${item.departmentPh}`;
+      const key = `${item.teacherName}__${item.subjectName}`;
       const current = grouped.get(key) ?? {
         teacherName: item.teacherName,
-        departmentPh: item.departmentPh,
+        subjectName: item.subjectName,
         classCount: 0,
         totalCredits: 0,
         totalStudents: 0,
@@ -244,8 +254,19 @@ export default function ImportPage({ termFilter, onTermFilterChange }: ImportPag
           title="Tạo lần nhập dữ liệu"
           extra={
             <Space wrap className="card-header-actions">
+              <Button icon={<DownloadOutlined />} onClick={() => {
+                const ws = XLSX.utils.aoa_to_sheet([
+                  ['Lớp học phần', 'Tên học phần', 'Tín chỉ', 'Bộ môn HN', 'Bộ môn PH', 'Số SV', 'Giảng viên', 'Chức danh', 'Trình độ']
+                ]);
+                ws['!cols'] = [{ wch: 25 }, { wch: 35 }, { wch: 10 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 25 }, { wch: 15 }, { wch: 15 }];
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'Data');
+                XLSX.writeFile(wb, 'mau-import-klgd.xlsx');
+              }}>
+                Tải mẫu Excel
+              </Button>
               <Button type="primary" icon={<UploadOutlined />} loading={uploadMutation.isPending} onClick={() => form.submit()}>
-                Nhập Excel
+                Nhập file
               </Button>
               <Button icon={<ReloadOutlined />} onClick={() => batches.refetch()}>
                 Làm mới danh sách
@@ -253,19 +274,22 @@ export default function ImportPage({ termFilter, onTermFilterChange }: ImportPag
             </Space>
           }
         >
-          <Form.Item name="file" label="File Excel" rules={[{ required: true, message: 'Chọn file Excel' }]}>
+          <Form.Item name="file" label="File Excel lớp học phần/HPTN hoặc PDF HPTN" rules={[{ required: true, message: 'Chọn file' }]}>
             <Upload.Dragger
-              maxCount={1}
-              accept=".xlsx"
+              multiple
+              accept=".xlsx,.pdf"
               beforeUpload={() => false}
-              onChange={(info) => setSelectedFileName(info.fileList[0]?.name)}
+              onChange={(info) => {
+                const names = info.fileList.map((item) => item.name);
+                setSelectedFileName(names.length > 1 ? `${names.length} file đã chọn` : names[0]);
+              }}
               onRemove={() => {
                 setSelectedFileName(undefined);
                 return true;
               }}
             >
               <p className="ant-upload-drag-icon"><InboxOutlined /></p>
-              <p className="ant-upload-text">Kéo thả hoặc chọn file danh sách lớp học phần</p>
+              <p className="ant-upload-text">Kéo thả hoặc chọn file danh sách lớp học phần/HPTN hoặc PDF giao đề tài HPTN</p>
               <p className={selectedFileName ? 'upload-file-name is-selected' : 'upload-file-name'}>
                 {selectedFileName || `Năm học ${termFilter.academicYear || defaultAcademicYear} - ${termFilter.semester || defaultSemester}`}
               </p>
@@ -380,7 +404,7 @@ export default function ImportPage({ termFilter, onTermFilterChange }: ImportPag
               children: (
                 <Table
                   className="workload-table"
-                  rowKey={(record) => `${record.teacherName}-${record.departmentPh}`}
+                  rowKey={(record) => `${record.teacherName}-${record.subjectName}`}
                   tableLayout="fixed"
                   scroll={{ x: 1120 }}
                   dataSource={teacherSummaryRows}
@@ -390,7 +414,7 @@ export default function ImportPage({ termFilter, onTermFilterChange }: ImportPag
                   columns={[
                     sttColumn,
                     { title: 'GV', dataIndex: 'teacherName', width: 210, className: 'text-left' },
-                    { title: 'Bộ môn', dataIndex: 'departmentPh', width: 140, className: 'text-left' },
+                    { title: 'Học phần', dataIndex: 'subjectName', width: 260, className: 'text-left workload-subject-cell' },
                     { title: 'Số lớp', dataIndex: 'classCount', width: 100 },
                     { title: 'Tổng TC', dataIndex: 'totalCredits', width: 100, render: formatNumber },
                     { title: 'Tổng SV', dataIndex: 'totalStudents', width: 110, render: formatNumber },
@@ -430,11 +454,12 @@ export default function ImportPage({ termFilter, onTermFilterChange }: ImportPag
                     {
                       title: '',
                       children: [
-                        { title: 'K_LT', dataIndex: 'coefficientTheory', width: 100, render: renderTheoryCoefficient, sorter: numberSorter((record) => hasSplitCoefficient(record) ? record.coefficientTheory : record.coefficientK) },
+                        { title: 'K', dataIndex: 'coefficientK', width: 90, render: renderGeneralCoefficient, sorter: numberSorter((record) => record.coefficientK) },
+                        { title: 'K_LT', dataIndex: 'coefficientTheory', width: 100, render: renderTheoryCoefficient, sorter: numberSorter((record) => record.coefficientTheory) },
                         { title: 'K_TH', dataIndex: 'coefficientPractice', width: 100, render: renderPracticeCoefficient, sorter: numberSorter((record) => record.coefficientPractice) }
                       ]
                     },
-                    { title: 'Tiết quy đổi', dataIndex: 'standardHours', width: 130, render: formatNumber, sorter: numberSorter((record) => record.standardHours) },
+                    { title: 'GC', dataIndex: 'standardHours', width: 130, render: formatNumber, sorter: numberSorter((record) => record.standardHours) },
                     { title: 'Quy tắc', dataIndex: 'ruleName', width: 220, className: 'text-left' }
                   ]}
                 />

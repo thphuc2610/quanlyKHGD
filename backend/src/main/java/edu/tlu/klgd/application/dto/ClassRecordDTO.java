@@ -1,5 +1,6 @@
 package edu.tlu.klgd.application.dto;
 
+import edu.tlu.klgd.domain.common.util.TextNormalizer;
 import edu.tlu.klgd.domain.entity.ClassRecord;
 
 public record ClassRecordDTO(
@@ -30,7 +31,7 @@ public record ClassRecordDTO(
             record.getDepartmentHn(),
             record.getDepartmentPh(),
             record.getStudentCount(),
-            record.getTeacherName(),
+            TextNormalizer.cleanTeacherName(record.getTeacherName()),
             record.getPosition(),
             record.getDegree(),
             record.getAcademicTitle(),

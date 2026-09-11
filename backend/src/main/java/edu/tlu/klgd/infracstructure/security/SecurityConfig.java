@@ -7,6 +7,7 @@ import edu.tlu.klgd.domain.common.MessageResponse;
 import edu.tlu.klgd.infracstructure.config.ApplicationProperties;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import org.springframework.context.annotation.*;
 import org.springframework.http.*;
 import org.springframework.security.config.Customizer;
@@ -95,7 +96,8 @@ public class SecurityConfig {
         String path
     ) throws IOException {
         response.setStatus(status.value());
-        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE + ";charset=" + StandardCharsets.UTF_8.name());
         objectMapper.writeValue(response.getWriter(), new MessageResponse(status.value(), message, path));
     }
 }

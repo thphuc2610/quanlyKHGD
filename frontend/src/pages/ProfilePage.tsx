@@ -337,9 +337,9 @@ export default function ProfilePage({ session, onSessionChange }: ProfilePagePro
                   <Descriptions bordered column={1} size="small">
                     <Descriptions.Item label="Bộ môn">{teacherProfile.departmentPh}</Descriptions.Item>
                     <Descriptions.Item label="Số lớp">{teacherProfile.classCount}</Descriptions.Item>
-                    <Descriptions.Item label="Tổng tín chỉ">{formatNumber(teacherProfile.totalCredits)}</Descriptions.Item>
+                    <Descriptions.Item label="Tổng TC">{formatNumber(teacherProfile.totalCredits)}</Descriptions.Item>
                     <Descriptions.Item label="Tổng sinh viên">{formatNumber(teacherProfile.totalStudents)}</Descriptions.Item>
-                    <Descriptions.Item label="Giờ chuẩn">{formatNumber(teacherProfile.totalStandardHours)}</Descriptions.Item>
+                    <Descriptions.Item label="GC">{formatNumber(teacherProfile.totalStandardHours)}</Descriptions.Item>
                   </Descriptions>
                 ) : (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chưa có dữ liệu giảng dạy" />
@@ -349,9 +349,9 @@ export default function ProfilePage({ session, onSessionChange }: ProfilePagePro
               {teacherProfile && (
                 <Row gutter={[16, 16]}>
                   <Col xs={24} md={6}><Card className="stat-card"><Statistic title="Số lớp" value={teacherProfile.classCount} /></Card></Col>
-                  <Col xs={24} md={6}><Card className="stat-card"><Statistic title="Tổng tín chỉ" value={teacherProfile.totalCredits} precision={2} /></Card></Col>
+                  <Col xs={24} md={6}><Card className="stat-card"><Statistic title="Tổng TC" value={teacherProfile.totalCredits} precision={2} /></Card></Col>
                   <Col xs={24} md={6}><Card className="stat-card"><Statistic title="Tổng sinh viên" value={teacherProfile.totalStudents} /></Card></Col>
-                  <Col xs={24} md={6}><Card className="stat-card"><Statistic title="Giờ chuẩn" value={teacherProfile.totalStandardHours} precision={2} /></Card></Col>
+                  <Col xs={24} md={6}><Card className="stat-card"><Statistic title="GC" value={teacherProfile.totalStandardHours} precision={2} /></Card></Col>
                 </Row>
               )}
             </Space>

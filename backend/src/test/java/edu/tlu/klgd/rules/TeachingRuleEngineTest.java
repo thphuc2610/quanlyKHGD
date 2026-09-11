@@ -57,19 +57,96 @@ class TeachingRuleEngineTest {
         RuleResultDTO result = engine.calculate(record, settings);
 
         assertThat(result.ruleCode()).isEqualTo("THUC_TAP_TRAC_DIA");
-        assertThat(result.coefficientK()).isEqualTo(3.25);
-        assertThat(result.standardHours()).isEqualTo(22.75);
+        assertThat(result.coefficientK()).isEqualTo(2.75);
+        assertThat(result.standardHours()).isEqualTo(19.25);
     }
 
     @Test
-    void calculatesGraduationInternshipWithConfigurableWeeks() {
-        ClassRecord record = baseRecord("Thực tập tốt nghiệp ngành kỹ thuật", 3, 12);
+    void calculatesGraduationInternshipWithCreditsAsWeeks() {
+        ClassRecord record = baseRecord("Thực tập tốt nghiệp ngành kỹ thuật", 3, 18);
 
         RuleResultDTO result = engine.calculate(record, settings);
 
         assertThat(result.ruleCode()).isEqualTo("THUC_TAP_TOT_NGHIEP");
         assertThat(result.coefficientK()).isEqualTo(0.5);
-        assertThat(result.standardHours()).isEqualTo(168.0);
+        assertThat(result.standardHours()).isEqualTo(27.0);
+    }
+
+    @Test
+    void calculatesProfessionalInternshipWithCreditsAsWeeks() {
+        ClassRecord record = baseRecord("Thuc tap nghe nghiep", 3, 18);
+
+        RuleResultDTO result = engine.calculate(record, settings);
+
+        assertThat(result.ruleCode()).isEqualTo("THUC_TAP_TOT_NGHIEP");
+        assertThat(result.coefficientK()).isEqualTo(0.5);
+        assertThat(result.standardHours()).isEqualTo(27.0);
+    }
+
+    @Test
+    void configuredBuiltInRulesStillClassifyProfessionalInternshipBeforeDefaultInternship() {
+        ClassRecord record = baseRecord("Thuc tap nghe nghiep", 3, 18);
+        CalculationSettingsDTO customSettings = settingsWithRules(
+            new SubjectRuleConfigDTO(
+                null,
+                "THUC_TAP_TOT_NGHIEP",
+                "Thuc tap tot nghiep",
+                null,
+                null,
+                "K = 0.5; GC = K * SV * TC",
+                ""
+            ),
+            new SubjectRuleConfigDTO(
+                null,
+                "THUC_TAP_TRUC_TIEP",
+                "Thuc tap truc tiep",
+                null,
+                null,
+                "Neu SV < 30 thi K = 2.0, nguoc lai K = 2.5 + (SV - 35) * 0.05; GC = K * N",
+                ""
+            )
+        );
+
+        RuleResultDTO result = engine.calculate(record, customSettings);
+
+        assertThat(result.ruleCode()).isEqualTo("THUC_TAP_TOT_NGHIEP");
+        assertThat(result.coefficientK()).isEqualTo(0.5);
+        assertThat(result.standardHours()).isEqualTo(27.0);
+    }
+
+    @Test
+    void calculatesIndustryInternshipWithCreditsAsWeeks() {
+        ClassRecord record = baseRecord("Thuc tap nganh CNTT", 3, 20);
+
+        RuleResultDTO result = engine.calculate(record, settings);
+
+        assertThat(result.ruleCode()).isEqualTo("THUC_TAP_NGANH");
+        assertThat(result.coefficientK()).isEqualTo(1.5);
+        assertThat(result.standardHours()).isEqualTo(30.0);
+    }
+
+    @Test
+    void calculatesGraduationProjectForTechnicalMajor() {
+        ClassRecord record = baseRecord("Hoc phan tot nghiep", 1.0, 10);
+        record.setUnitName("Ky thuat xay dung");
+
+        RuleResultDTO result = engine.calculate(record, settings);
+
+        assertThat(result.ruleCode()).isEqualTo("HPTN");
+        assertThat(result.coefficientK()).isEqualTo(1.0);
+        assertThat(result.standardHours()).isEqualTo(140.0);
+    }
+
+    @Test
+    void calculatesGraduationProjectForSharedSocialMajorAdvisor() {
+        ClassRecord record = baseRecord("HPTN", 0.5, 2);
+        record.setUnitName("Quan tri kinh doanh");
+
+        RuleResultDTO result = engine.calculate(record, settings);
+
+        assertThat(result.ruleCode()).isEqualTo("HPTN");
+        assertThat(result.coefficientK()).isEqualTo(0.8);
+        assertThat(result.standardHours()).isEqualTo(22.4);
     }
 
     @Test
@@ -94,7 +171,8 @@ class TeachingRuleEngineTest {
 
         assertThat(result.ruleCode()).isEqualTo("VAT_LIEU_XAY_DUNG");
         assertThat(result.coefficientTheory()).isEqualTo(1.0);
-        assertThat(result.standardHours()).isEqualTo(51.9);
+        assertThat(result.coefficientPractice()).isEqualTo(1.05);
+        assertThat(result.standardHours()).isEqualTo(51.45);
     }
 
     @Test
@@ -104,7 +182,9 @@ class TeachingRuleEngineTest {
         RuleResultDTO result = engine.calculate(record, settings);
 
         assertThat(result.ruleCode()).isEqualTo("CO_HOC_DAT");
-        assertThat(result.standardHours()).isEqualTo(45.6);
+        assertThat(result.coefficientTheory()).isEqualTo(1.0);
+        assertThat(result.coefficientPractice()).isEqualTo(1.05);
+        assertThat(result.standardHours()).isEqualTo(45.3);
     }
 
     @Test
@@ -114,7 +194,9 @@ class TeachingRuleEngineTest {
         RuleResultDTO result = engine.calculate(record, settings);
 
         assertThat(result.ruleCode()).isEqualTo("DIA_KY_THUAT");
-        assertThat(result.standardHours()).isEqualTo(63.6);
+        assertThat(result.coefficientTheory()).isEqualTo(1.0);
+        assertThat(result.coefficientPractice()).isEqualTo(1.05);
+        assertThat(result.standardHours()).isEqualTo(60.3);
     }
 
     @Test
@@ -157,7 +239,7 @@ class TeachingRuleEngineTest {
             "Thuc tap tot nghiep",
             null,
             null,
-            "K = 0.6; Gio chuan = K * SV * so tuan thuc tap tot nghiep",
+            "K = 0.6; Gio chuan = K * SV * TC",
             ""
         ));
 
@@ -165,7 +247,7 @@ class TeachingRuleEngineTest {
 
         assertThat(result.ruleCode()).isEqualTo("THUC_TAP_TOT_NGHIEP");
         assertThat(result.coefficientK()).isEqualTo(0.6);
-        assertThat(result.standardHours()).isEqualTo(201.6);
+        assertThat(result.standardHours()).isEqualTo(21.6);
     }
 
     @Test
@@ -175,8 +257,8 @@ class TeachingRuleEngineTest {
             null,
             "SUBJECT_VLXD_DEMO",
             "VLXD demo",
-            "K_lt = min(max(1.0 + (SV - 40) * 0.01, 0.9), 1.5)",
-            "K_th = min(max(0.6 + (SV_nhom - 25) * 0.015, 0.5), 1.2)",
+            "K_lt = 1.0 + (SV - 40) * 0.01",
+            "K_th = max(0.6 + (SV - 25) * 0.015, 0.5)",
             "Gio chuan = 42 * K_lt + 9 * K_th",
             ""
         ));
@@ -185,7 +267,8 @@ class TeachingRuleEngineTest {
 
         assertThat(result.ruleCode()).isEqualTo("SUBJECT_VLXD_DEMO");
         assertThat(result.coefficientTheory()).isEqualTo(1.0);
-        assertThat(result.standardHours()).isEqualTo(51.9);
+        assertThat(result.coefficientPractice()).isEqualTo(0.83);
+        assertThat(result.standardHours()).isEqualTo(49.43);
     }
 
     private ClassRecord baseRecord(String subjectName, double credits, int students) {

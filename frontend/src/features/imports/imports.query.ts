@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { message } from 'antd';
+import type { RcFile } from 'antd/es/upload/interface';
 import { importsService } from './imports.service';
 import type { ImportBatch, UploadImportBatchForm } from './imports.types';
 
@@ -29,15 +30,19 @@ export function useUploadImportBatchMutation(onSuccess?: (batch: ImportBatch) =>
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (values: UploadImportBatchForm) => {
-      const file = values.file.fileList[0].originFileObj;
-      if (!file) {
-        throw new Error('Chưa chọn file Excel');
+      const files: RcFile[] = values.file.fileList.flatMap((item) => item.originFileObj ? [item.originFileObj] : []);
+      if (files.length === 0) {
+        throw new Error('Chưa chọn file Excel/PDF');
       }
-      return importsService.uploadBatch(file, values.academicYear, values.semester);
+      const batches: ImportBatch[] = [];
+      for (const file of files) {
+        batches.push(await importsService.uploadBatch(file, values.academicYear, values.semester));
+      }
+      return batches;
     },
-    onSuccess: (batch) => {
-      message.success('Nhập file thành công');
-      onSuccess?.(batch);
+    onSuccess: (batches) => {
+      message.success(`Đã nhập ${batches.length} file thành công`);
+      onSuccess?.(batches[batches.length - 1]);
       queryClient.invalidateQueries({ queryKey: importQueryKeys.batches });
     }
   });

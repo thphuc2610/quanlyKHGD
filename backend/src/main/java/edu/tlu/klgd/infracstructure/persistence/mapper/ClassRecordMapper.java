@@ -1,6 +1,7 @@
 package edu.tlu.klgd.infracstructure.persistence.mapper;
 
 import edu.tlu.klgd.application.dto.ClassRecordDTO;
+import edu.tlu.klgd.domain.common.util.TextNormalizer;
 import edu.tlu.klgd.domain.entity.ClassRecord;
 import org.springframework.stereotype.Component;
 
@@ -14,10 +15,10 @@ public class ClassRecordMapper {
             record.getClassName(),
             record.getSubjectName(),
             record.getCredits(),
-            record.getDepartmentHn(),
-            record.getDepartmentPh(),
+            TextNormalizer.cleanDepartmentName(record.getDepartmentHn()),
+            TextNormalizer.cleanDepartmentName(record.getDepartmentPh()),
             record.getStudentCount(),
-            record.getTeacherName(),
+            TextNormalizer.cleanTeacherName(record.getTeacherName()),
             record.getPosition(),
             record.getDegree(),
             record.getAcademicTitle(),

@@ -4,6 +4,7 @@ import edu.tlu.klgd.application.dto.*;
 import edu.tlu.klgd.domain.common.ApiMessage;
 import edu.tlu.klgd.domain.common.TeachingRuleConstant;
 import edu.tlu.klgd.domain.common.WorkloadConstant;
+import edu.tlu.klgd.domain.common.util.TextNormalizer;
 import edu.tlu.klgd.domain.entity.*;
 import edu.tlu.klgd.domain.repository.*;
 import edu.tlu.klgd.domain.service.TeachingRuleService;
@@ -41,15 +42,27 @@ public class WorkloadServiceImpl implements WorkloadService {
     public int calculate(Long importBatchId, CalculationSettingsDTO settings) {
         ImportBatch batch = importBatchRepository.findById(importBatchId)
             .orElseThrow(() -> new ResourceNotFoundException(ApiMessage.RESOURCE_IMPORT_BATCH, importBatchId));
-        calculationResultRepository.deleteByImportBatchId(importBatchId);
-        List<CalculationResult> results = classRecordRepository.findByImportBatchId(importBatchId).stream()
-            .filter(ClassRecord::isValid)
-            .map(record -> toResult(record, batch, teachingRuleService.calculate(record, settings)))
-            .toList();
-        calculationResultRepository.saveAll(results);
-        batch.setStatus(ImportStatus.CALCULATED);
-        importBatchRepository.save(batch);
-        return results.size();
+        
+        Set<ImportBatch> batchesToCalculate = new HashSet<>();
+        batchesToCalculate.addAll(importBatchRepository.findByAcademicYearAndSemester(
+            batch.getAcademicYear(),
+            batch.getSemester()
+        ));
+        batchesToCalculate.addAll(importBatchRepository.findByStatus(ImportStatus.UPLOADED));
+        
+        int calculatedRows = 0;
+        for (ImportBatch b : batchesToCalculate) {
+            calculationResultRepository.deleteByImportBatchId(b.getId());
+            List<CalculationResult> results = classRecordRepository.findByImportBatchId(b.getId()).stream()
+                .filter(ClassRecord::isValid)
+                .map(record -> toResult(record, b, teachingRuleService.calculate(record, settings)))
+                .toList();
+            calculationResultRepository.saveAll(results);
+            b.setStatus(ImportStatus.CALCULATED);
+            importBatchRepository.save(b);
+            calculatedRows += results.size();
+        }
+        return calculatedRows;
     }
 
     @Override
@@ -93,19 +106,20 @@ public class WorkloadServiceImpl implements WorkloadService {
     }
 
     private List<TeacherWorkloadDTO> buildTeacherWorkloads(List<CalculationResult> results) {
+        Map<String, String> teacherDisplayNames = teacherDisplayNames(results);
         return results.stream()
             .collect(Collectors.groupingBy(result ->
-                result.getClassRecord().getTeacherName()
+                reportTeacherName(result.getClassRecord(), teacherDisplayNames)
                     + WorkloadConstant.GROUP_KEY_SEPARATOR
-                    + result.getClassRecord().getDepartmentPh()
+                    + TextNormalizer.cleanDepartmentName(result.getClassRecord().getDepartmentPh())
             ))
             .values()
             .stream()
             .map(group -> {
                 ClassRecord first = group.getFirst().getClassRecord();
                 return new TeacherWorkloadDTO(
-                    first.getTeacherName(),
-                    first.getDepartmentPh(),
+                    reportTeacherName(first, teacherDisplayNames),
+                    TextNormalizer.cleanDepartmentName(first.getDepartmentPh()),
                     group.size(),
                     round(group.stream().mapToDouble(result -> value(result.getClassRecord().getCredits())).sum()),
                     group.stream().mapToLong(result -> value(result.getClassRecord().getStudentCount())).sum(),
@@ -119,16 +133,18 @@ public class WorkloadServiceImpl implements WorkloadService {
     @Override
     @Transactional(readOnly = true)
     public List<TeacherWorkloadDetailDTO> teacherDetails(String username) {
-        return scopedResults(username).stream()
+        List<CalculationResult> results = scopedResults(username);
+        Map<String, String> teacherDisplayNames = teacherDisplayNames(results);
+        return results.stream()
             .map(result -> {
                 ClassRecord record = result.getClassRecord();
                 return new TeacherWorkloadDetailDTO(
-                    record.getTeacherName(),
+                    reportTeacherName(record, teacherDisplayNames),
                     record.getClassName(),
                     record.getSubjectName(),
                     value(record.getCredits()),
                     value(record.getStudentCount()),
-                    record.getDepartmentPh(),
+                    TextNormalizer.cleanDepartmentName(record.getDepartmentPh()),
                     record.getUnitName(),
                     result.getCoefficientK(),
                     result.getCoefficientTheory(),
@@ -150,7 +166,7 @@ public class WorkloadServiceImpl implements WorkloadService {
     @Transactional(readOnly = true)
     public List<DepartmentWorkloadDTO> departments(String username) {
         return scopedResults(username).stream()
-            .collect(Collectors.groupingBy(result -> result.getClassRecord().getDepartmentPh()))
+            .collect(Collectors.groupingBy(result -> TextNormalizer.cleanDepartmentName(result.getClassRecord().getDepartmentPh())))
             .entrySet()
             .stream()
             .map(entry -> new DepartmentWorkloadDTO(
@@ -187,7 +203,25 @@ public class WorkloadServiceImpl implements WorkloadService {
     @Override
     @Transactional(readOnly = true)
     public List<TeacherOptionDTO> teacherOptions() {
-        return classRecordRepository.findTeacherOptions();
+        Map<String, TeacherOptionDTO> options = new LinkedHashMap<>();
+        classRecordRepository.findTeacherOptions().forEach(option -> {
+            String teacherName = TextNormalizer.cleanTeacherName(option.teacherName());
+            if (teacherName.isBlank()) {
+                return;
+            }
+            String cleanDept = TextNormalizer.cleanDepartmentName(option.departmentPh());
+            String key = TextNormalizer.normalize(teacherName)
+                + WorkloadConstant.GROUP_KEY_SEPARATOR
+                + normalizeText(cleanDept);
+            options.merge(
+                key,
+                new TeacherOptionDTO(teacherName, cleanDept),
+                (current, candidate) -> new TeacherOptionDTO(preferredTeacherName(current.teacherName(), candidate.teacherName()), current.departmentPh())
+            );
+        });
+        return options.values().stream()
+            .sorted(Comparator.comparing(TeacherOptionDTO::teacherName, String.CASE_INSENSITIVE_ORDER))
+            .toList();
     }
 
     private List<CalculationResult> scopedResults(String username) {
@@ -197,12 +231,12 @@ public class WorkloadServiceImpl implements WorkloadService {
         if (user.getRoles().contains(UserRole.ADMIN)) {
             return results;
         }
-        String teacherName = normalize(user.getTeacherName());
+        String teacherName = normalizeTeacherKey(user.getTeacherName());
         if (teacherName == null) {
             return List.of();
         }
         return results.stream()
-            .filter(result -> teacherName.equals(normalize(result.getClassRecord().getTeacherName())))
+            .filter(result -> teacherName.equals(normalizeTeacherKey(result.getClassRecord().getTeacherName())))
             .toList();
     }
 
@@ -237,5 +271,47 @@ public class WorkloadServiceImpl implements WorkloadService {
             return null;
         }
         return value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static Map<String, String> teacherDisplayNames(List<CalculationResult> results) {
+        Map<String, String> names = new LinkedHashMap<>();
+        results.stream()
+            .map(result -> TextNormalizer.cleanTeacherName(result.getClassRecord().getTeacherName()))
+            .filter(value -> !value.isBlank())
+            .forEach(name -> names.merge(TextNormalizer.normalize(name), name, WorkloadServiceImpl::preferredTeacherName));
+        return names;
+    }
+
+    private static String reportTeacherName(ClassRecord record, Map<String, String> teacherDisplayNames) {
+        String teacherName = TextNormalizer.cleanTeacherName(record.getTeacherName());
+        return teacherDisplayNames.getOrDefault(TextNormalizer.normalize(teacherName), teacherName);
+    }
+
+    private static String preferredTeacherName(String current, String candidate) {
+        int comparison = Integer.compare(teacherNameScore(candidate), teacherNameScore(current));
+        return comparison > 0 || (comparison == 0 && candidate.compareToIgnoreCase(current) < 0) ? candidate : current;
+    }
+
+    private static int teacherNameScore(String value) {
+        int score = 0;
+        if (!value.matches(".*[.,;:]+.*")) {
+            score += 2;
+        }
+        return score + accentScore(value);
+    }
+
+    private static int accentScore(String value) {
+        return (int) value.chars()
+            .filter(character -> character > 127 && character != '\uFFFD')
+            .count();
+    }
+
+    private static String normalizeTeacherKey(String value) {
+        String teacherName = TextNormalizer.cleanTeacherName(value);
+        return teacherName.isBlank() ? null : TextNormalizer.normalize(teacherName);
+    }
+
+    private static String normalizeText(String value) {
+        return value == null ? "" : TextNormalizer.normalize(value);
     }
 }

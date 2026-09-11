@@ -43,7 +43,7 @@ public class ImportBatchController {
         @RequestParam @NotBlank String semester,
         HttpServletRequest request
     ) throws IOException {
-        if (!ExcelHelper.hasExcelFormat(file)) {
+        if (!ExcelHelper.hasSupportedImportFormat(file)) {
             throw new BadRequestException(ApiMessage.EXCEL_FILE_REQUIRED);
         }
         return new ResponseEntity<>(importBatchService.importWorkbook(file, academicYear, semester), HttpStatus.CREATED);

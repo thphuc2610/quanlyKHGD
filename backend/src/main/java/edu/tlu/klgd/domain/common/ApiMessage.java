@@ -9,7 +9,7 @@ public final class ApiMessage {
     public static final String INVALID_DATA = "Dữ liệu không hợp lệ";
     public static final String FILE_TOO_LARGE = "Tệp vượt quá dung lượng cho phép";
     public static final String FILE_PROCESSING_FAILED = "Không thể xử lý tệp hoặc báo cáo";
-    public static final String EXCEL_FILE_REQUIRED = "Vui lòng tải lên tệp Excel";
+    public static final String EXCEL_FILE_REQUIRED = "Vui lòng tải lên tệp Excel hoặc PDF HPTN";
     public static final String VALID_EXCEL_SHEET_NOT_FOUND = "Không tìm thấy trang tính hợp lệ trong tệp Excel";
     public static final String INVALID_CLASS_RECORD_WARNING = "Thiếu/sai tín chỉ, số sinh viên phải từ 10 trở lên, tên môn hoặc giảng viên.";
     public static final String INVALID_USERNAME_OR_PASSWORD = "Tên đăng nhập hoặc mật khẩu không đúng";
